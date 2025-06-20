@@ -1045,7 +1045,6 @@ Reemplaza TU_API_KEY_AQUI con tu API key de TMDB
 -->
 
 <script>
-<script>
 
 // ==== CONFIGURACIÓN ====
 
@@ -1064,6 +1063,8 @@ class TMDBClient {
         this.imageBaseURL = 'https://image.tmdb.org/t/p/w500';
 
         this.backdropBaseURL = 'https://image.tmdb.org/t/p/w1280';
+
+        this.logoBaseURL = 'https://image.tmdb.org/t/p/original'; // Para logos en alta resolución
 
     }
 
@@ -1135,6 +1136,70 @@ class TMDBClient {
 
     }
 
+    // Nueva función para obtener imágenes incluyendo logos
+    async getMovieImages(movieId) {
+        try {
+            const response = await fetch(
+                `${this.baseURL}/movie/${movieId}/images?api_key=${this.apiKey}`
+            );
+            
+            if (!response.ok) {
+                console.warn('⚠️ No se pudieron obtener imágenes adicionales');
+                return null;
+            }
+            
+            const images = await response.json();
+            console.log('🖼️ Imágenes disponibles:', images);
+            
+            // Buscar logo (preferir inglés, luego sin idioma, luego cualquiera)
+            let logo = null;
+            if (images.logos && images.logos.length > 0) {
+                logo = images.logos.find(l => l.iso_639_1 === 'en') || 
+                       images.logos.find(l => l.iso_639_1 === null) ||
+                       images.logos[0];
+            }
+            
+            return {
+                logo: logo ? `${this.logoBaseURL}${logo.file_path}` : null
+            };
+        } catch (error) {
+            console.warn('⚠️ Error obteniendo imágenes:', error);
+            return null;
+        }
+    }
+
+    // Nueva función para obtener imágenes de series incluyendo logos
+    async getTVImages(tvId) {
+        try {
+            const response = await fetch(
+                `${this.baseURL}/tv/${tvId}/images?api_key=${this.apiKey}`
+            );
+            
+            if (!response.ok) {
+                console.warn('⚠️ No se pudieron obtener imágenes adicionales');
+                return null;
+            }
+            
+            const images = await response.json();
+            console.log('🖼️ Imágenes de serie disponibles:', images);
+            
+            // Buscar logo (preferir inglés, luego sin idioma, luego cualquiera)
+            let logo = null;
+            if (images.logos && images.logos.length > 0) {
+                logo = images.logos.find(l => l.iso_639_1 === 'en') || 
+                       images.logos.find(l => l.iso_639_1 === null) ||
+                       images.logos[0];
+            }
+            
+            return {
+                logo: logo ? `${this.logoBaseURL}${logo.file_path}` : null
+            };
+        } catch (error) {
+            console.warn('⚠️ Error obteniendo imágenes de serie:', error);
+            return null;
+        }
+    }
+
     async getMovieDetails(movieId) {
 
         const response = await fetch(
@@ -1152,6 +1217,9 @@ class TMDBClient {
         const movie = await response.json();
 
         console.log('🎬 Detalles de película:', movie);
+
+        // Obtener imágenes adicionales incluyendo logos
+        const images = await this.getMovieImages(movieId);
 
         return {
 
@@ -1187,6 +1255,8 @@ class TMDBClient {
 
             background: movie.backdrop_path ? `${this.backdropBaseURL}${movie.backdrop_path}` : '',
 
+            logo: images?.logo || '', // ✨ NUEVO: Logo agregado
+
             description: movie.overview
 
         };
@@ -1210,6 +1280,9 @@ class TMDBClient {
         const tv = await response.json();
 
         console.log('📺 Detalles de serie:', tv);
+
+        // Obtener imágenes adicionales incluyendo logos
+        const images = await this.getTVImages(tvId);
 
         return {
 
@@ -1238,6 +1311,8 @@ class TMDBClient {
             poster: tv.poster_path ? `${this.imageBaseURL}${tv.poster_path}` : '',
 
             background: tv.backdrop_path ? `${this.backdropBaseURL}${tv.backdrop_path}` : '',
+
+            logo: images?.logo || '', // ✨ NUEVO: Logo agregado
 
             description: tv.overview
 
@@ -1409,11 +1484,20 @@ async function autoFillMovie(imdbId) {
 
         fillField('movieBackground', movieData.background);
 
+        fillField('movieLogo', movieData.logo); // ✨ NUEVO: Logo agregado
+
         fillField('movieDescription', movieData.description);
 
         
 
-        showMessage('✅ Información de película cargada desde TMDB', 'success');
+        // Mostrar información del logo en consola
+        if (movieData.logo) {
+            console.log('🎨 Logo encontrado:', movieData.logo);
+            showMessage('✅ Información de película cargada (con logo)', 'success');
+        } else {
+            console.log('⚠️ No se encontró logo para esta película');
+            showMessage('✅ Información de película cargada (sin logo)', 'warning');
+        }
 
         
 
@@ -1483,11 +1567,20 @@ async function autoFillSeries(imdbId) {
 
         fillField('seriesBackground', seriesData.background);
 
+        fillField('seriesLogo', seriesData.logo); // ✨ NUEVO: Logo agregado
+
         fillField('seriesDescription', seriesData.description);
 
         
 
-        showMessage('✅ Información de serie cargada desde TMDB', 'success');
+        // Mostrar información del logo en consola
+        if (seriesData.logo) {
+            console.log('🎨 Logo de serie encontrado:', seriesData.logo);
+            showMessage('✅ Información de serie cargada (con logo)', 'success');
+        } else {
+            console.log('⚠️ No se encontró logo para esta serie');
+            showMessage('✅ Información de serie cargada (sin logo)', 'warning');
+        }
 
         
 
@@ -1505,7 +1598,7 @@ async function autoFillSeries(imdbId) {
 
 document.addEventListener('DOMContentLoaded', function() {
 
-    console.log('🚀 Autocompletado TMDB iniciado');
+    console.log('🚀 Autocompletado TMDB con logos iniciado');
 
     
 
@@ -1617,6 +1710,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             console.log('✅ Test exitoso:', result);
 
+            console.log('🎨 URL del logo:', result.logo || 'No disponible');
+
             return result;
 
         } catch (error) {
@@ -1634,43 +1729,5 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 </script>
-
-<!-- 
-
-INSTRUCCIONES DE USO:
-
-1. Obtén tu API key GRATUITA de TMDB:
-
-   - Ve a https://www.themoviedb.org/
-
-   - Crea una cuenta (gratis)
-
-   - Ve a Settings → API
-
-   - Copia tu API key
-
-2. Cambia "TU_API_KEY_AQUI" por tu API key real en la línea 6
-
-3. Pega este script completo antes del </body> de tu HTML
-
-4. ¡Listo! Los botones "🔄 Autocompletar desde TMDB" aparecerán automáticamente
-
-COMO USAR:
-
-- Ingresa un ID de IMDB (ej: tt0111161)
-
-- Haz clic en "🔄 Autocompletar desde TMDB" O sal del campo
-
-- Los campos se llenarán automáticamente
-
-PARA DIAGNOSTICAR PROBLEMAS:
-
-- Abre F12 → Console
-
-- Escribe: testTMDB("tt0111161")
-
-- Revisa los mensajes de la consola
-
---> 
 </body>
 </html>
