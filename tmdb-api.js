@@ -4,7 +4,7 @@
 class TMDBClient {
     constructor() {
         // API Key gratuita de TMDB (puedes obtener una en https://www.themoviedb.org/settings/api)
-        this.apiKey = ''; // Reemplaza con tu API key de TMDB
+        this.apiKey = 'ed52d6c5a797006699cdcc63ed1208d5'; // Reemplaza con tu API key de TMDB
         this.baseURL = 'https://api.themoviedb.org/3';
         this.imageBaseURL = 'https://image.tmdb.org/t/p/w500';
         this.backdropBaseURL = 'https://image.tmdb.org/t/p/w1280';
