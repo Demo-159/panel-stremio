@@ -102,14 +102,24 @@ app.get('/meta/:type/:id.json', (req, res) => {
     if (series) {
       // Obtener episodios de la serie
       const episodes = contentDatabase.episodes.filter(ep => ep.seriesId === id);
+      
+      // Ordenar episodios por temporada y episodio
+      episodes.sort((a, b) => {
+        if (a.season !== b.season) {
+          return a.season - b.season;
+        }
+        return a.episode - b.episode;
+      });
+      
       const videos = episodes.map(ep => ({
         id: `${id}:${ep.season}:${ep.episode}`,
-        title: `S${ep.season}E${ep.episode} - ${ep.name}`,
+        title: `S${ep.season.toString().padStart(2, '0')}E${ep.episode.toString().padStart(2, '0')} - ${ep.name}`,
         season: ep.season,
         episode: ep.episode,
-        overview: ep.description,
-        thumbnail: ep.poster,
-        released: new Date(ep.year, 0, 1).toISOString()
+        overview: ep.description || '',
+        thumbnail: ep.poster || series.poster,
+        released: ep.year ? new Date(ep.year, 0, 1).toISOString() : new Date().toISOString(),
+        runtime: ep.runtime || series.runtime
       }));
       
       meta = {
@@ -130,6 +140,8 @@ app.get('/meta/:type/:id.json', (req, res) => {
 app.get('/stream/:type/:id.json', (req, res) => {
   const { type, id } = req.params;
   
+  console.log(`Stream request: type=${type}, id=${id}`);
+  
   let streams = [];
   
   if (type === 'movie') {
@@ -141,25 +153,61 @@ app.get('/stream/:type/:id.json', (req, res) => {
         quality: movie.quality || 'HD'
       });
     }
+    console.log(`Movie streams found: ${streams.length}`);
   } else if (type === 'series') {
     // Para episodios de series: format id:season:episode
-    const [seriesId, season, episode] = id.split(':');
-    const ep = contentDatabase.episodes.find(ep => 
-      ep.seriesId === seriesId && 
-      ep.season === parseInt(season) && 
-      ep.episode === parseInt(episode)
-    );
+    const parts = id.split(':');
+    console.log(`Episode ID parts:`, parts);
     
-    if (ep && ep.url) {
-      streams.push({
-        url: ep.url,
-        title: `${ep.quality || 'HD'} - ${ep.language || 'Español'}`,
-        quality: ep.quality || 'HD'
-      });
+    if (parts.length === 3) {
+      const [seriesId, season, episode] = parts;
+      const seasonNum = parseInt(season);
+      const episodeNum = parseInt(episode);
+      
+      console.log(`Looking for episode: seriesId=${seriesId}, season=${seasonNum}, episode=${episodeNum}`);
+      
+      const ep = contentDatabase.episodes.find(ep => 
+        ep.seriesId === seriesId && 
+        ep.season === seasonNum && 
+        ep.episode === episodeNum
+      );
+      
+      console.log(`Episode found:`, ep ? 'YES' : 'NO');
+      
+      if (ep && ep.url) {
+        streams.push({
+          url: ep.url,
+          title: `${ep.quality || 'HD'} - ${ep.language || 'Español'}`,
+          quality: ep.quality || 'HD'
+        });
+        console.log(`Episode stream added: ${ep.url}`);
+      }
     }
+    console.log(`Episode streams found: ${streams.length}`);
   }
   
   res.json({ streams });
+});
+
+// API para eliminar episodios específicos
+app.delete('/api/delete/episode/:episodeId', (req, res) => {
+  const { episodeId } = req.params;
+  
+  // Decodificar el ID del episodio (format: seriesId:season:episode)
+  const [seriesId, season, episode] = episodeId.split(':');
+  
+  const index = contentDatabase.episodes.findIndex(ep => 
+    ep.seriesId === seriesId && 
+    ep.season === parseInt(season) && 
+    ep.episode === parseInt(episode)
+  );
+  
+  if (index !== -1) {
+    contentDatabase.episodes.splice(index, 1);
+    res.json({ success: true, message: 'Episodio eliminado' });
+  } else {
+    res.status(404).json({ error: 'Episodio no encontrado' });
+  }
 });
 
 // API para agregar contenido
@@ -275,6 +323,44 @@ app.post('/api/add-episode', (req, res) => {
 // API para obtener contenido
 app.get('/api/content', (req, res) => {
   res.json(contentDatabase);
+});
+
+// API para debug - obtener episodios de una serie específica
+app.get('/api/debug/series/:seriesId/episodes', (req, res) => {
+  const { seriesId } = req.params;
+  const episodes = contentDatabase.episodes.filter(ep => ep.seriesId === seriesId);
+  res.json({
+    seriesId,
+    episodeCount: episodes.length,
+    episodes: episodes
+  });
+});
+
+// API para debug - verificar meta de serie
+app.get('/api/debug/meta/:seriesId', (req, res) => {
+  const { seriesId } = req.params;
+  const series = contentDatabase.series.find(s => s.id === seriesId);
+  const episodes = contentDatabase.episodes.filter(ep => ep.seriesId === seriesId);
+  
+  if (!series) {
+    return res.status(404).json({ error: 'Serie no encontrada' });
+  }
+  
+  const videos = episodes.map(ep => ({
+    id: `${seriesId}:${ep.season}:${ep.episode}`,
+    title: `S${ep.season.toString().padStart(2, '0')}E${ep.episode.toString().padStart(2, '0')} - ${ep.name}`,
+    season: ep.season,
+    episode: ep.episode,
+    overview: ep.description || '',
+    thumbnail: ep.poster || series.poster,
+    released: ep.year ? new Date(ep.year, 0, 1).toISOString() : new Date().toISOString()
+  }));
+  
+  res.json({
+    series,
+    episodeCount: episodes.length,
+    videos
+  });
 });
 
 // API para eliminar contenido
