@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: stremio-personal-addon
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /manifest.json
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        fromService:
+          type: web
+          name: stremio-personal-addon
+          property: port
