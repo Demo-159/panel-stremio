@@ -39,7 +39,7 @@ const addonConfig = {
   id: 'com.tudominio.myaddon',
   version: '1.0.0',
   name: 'Reproducir ahora',
-  description: 'Contenido en Español Latino,
+  description: 'Contenido en Español Latino',
   logo: 'https://via.placeholder.com/200x200.png?text=Mi+Addon',
   background: 'https://via.placeholder.com/1920x1080.png?text=Background',
   types: ['movie', 'series'],
