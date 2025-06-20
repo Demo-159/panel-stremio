@@ -46,12 +46,12 @@ const addonConfig = {
   catalogs: [
     {
       type: 'movie',
-      id: 'Recomendación',
+      id: 'my-movies',
       name: 'Recomendación'
     },
     {
       type: 'series',
-      id: 'Recomendación',
+      id: 'my-series',
       name: 'Recomendación'
     }
   ],
