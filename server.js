@@ -1,3 +1,191 @@
+// FUNCIÓN PARA AUTOCOMPLETAR DESDE IMDB
+// Agregar este código al final de tu script existente (antes del cierre de </script>)
+
+// API gratuita de OMDb (alternativa a IMDb)
+const OMDB_API_KEY = 'd4cfb5f6'; // API key gratuita pública
+
+// Función para obtener datos de OMDb por ID de IMDb
+async function fetchIMDbData(imdbId) {
+    try {
+        const response = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${OMDB_API_KEY}&plot=full`);
+        const data = await response.json();
+        
+        if (data.Response === 'True') {
+            return {
+                title: data.Title,
+                year: data.Year,
+                runtime: data.Runtime ? parseInt(data.Runtime.replace(' min', '')) : null,
+                genre: data.Genre,
+                director: data.Director,
+                actors: data.Actors,
+                plot: data.Plot,
+                poster: data.Poster !== 'N/A' ? data.Poster : '',
+                imdbRating: data.imdbRating !== 'N/A' ? parseFloat(data.imdbRating) : null,
+                type: data.Type // movie, series, episode
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Error al obtener datos de OMDb:', error);
+        return null;
+    }
+}
+
+// Función para traducir géneros al español
+function translateGenres(genres) {
+    const translations = {
+        'Action': 'Acción',
+        'Adventure': 'Aventura',
+        'Animation': 'Animación',
+        'Biography': 'Biografía',
+        'Comedy': 'Comedia',
+        'Crime': 'Crimen',
+        'Documentary': 'Documental',
+        'Drama': 'Drama',
+        'Family': 'Familia',
+        'Fantasy': 'Fantasía',
+        'History': 'Historia',
+        'Horror': 'Terror',
+        'Music': 'Música',
+        'Musical': 'Musical',
+        'Mystery': 'Misterio',
+        'Romance': 'Romance',
+        'Sci-Fi': 'Ciencia Ficción',
+        'Sport': 'Deportes',
+        'Thriller': 'Thriller',
+        'War': 'Guerra',
+        'Western': 'Western'
+    };
+    
+    return genres.split(', ').map(genre => translations[genre] || genre).join(', ');
+}
+
+// Función para autocompletar película
+async function autofillMovieData(imdbId) {
+    if (!imdbId || !imdbId.startsWith('tt')) {
+        showAlert('error', 'ID de IMDb inválido. Debe empezar con "tt"', 'movies');
+        return;
+    }
+    
+    showLoading(true);
+    const data = await fetchIMDbData(imdbId);
+    
+    if (data && data.type === 'movie') {
+        // Rellenar campos de película
+        document.getElementById('movieName').value = data.title || '';
+        document.getElementById('movieYear').value = data.year || '';
+        document.getElementById('movieRuntime').value = data.runtime || '';
+        document.getElementById('movieGenre').value = translateGenres(data.genre || '');
+        document.getElementById('movieDirector').value = data.director || '';
+        document.getElementById('movieCast').value = data.actors || '';
+        document.getElementById('movieRating').value = data.imdbRating || '';
+        document.getElementById('moviePoster').value = data.poster || '';
+        document.getElementById('movieDescription').value = data.plot || '';
+        
+        showAlert('success', '¡Datos de la película cargados automáticamente desde IMDb!', 'movies');
+    } else if (data && data.type !== 'movie') {
+        showAlert('error', 'Este ID corresponde a una serie o episodio, no a una película', 'movies');
+    } else {
+        showAlert('error', 'No se pudieron obtener datos de IMDb para este ID', 'movies');
+    }
+    
+    showLoading(false);
+}
+
+// Función para autocompletar serie
+async function autofillSeriesData(imdbId) {
+    if (!imdbId || !imdbId.startsWith('tt')) {
+        showAlert('error', 'ID de IMDb inválido. Debe empezar con "tt"', 'series');
+        return;
+    }
+    
+    showLoading(true);
+    const data = await fetchIMDbData(imdbId);
+    
+    if (data && data.type === 'series') {
+        // Rellenar campos de serie
+        document.getElementById('seriesName').value = data.title || '';
+        document.getElementById('seriesYear').value = data.year || '';
+        document.getElementById('seriesRuntime').value = data.runtime || '';
+        document.getElementById('seriesGenre').value = translateGenres(data.genre || '');
+        document.getElementById('seriesDirector').value = data.director || '';
+        document.getElementById('seriesCast').value = data.actors || '';
+        document.getElementById('seriesRating').value = data.imdbRating || '';
+        document.getElementById('seriesPoster').value = data.poster || '';
+        document.getElementById('seriesDescription').value = data.plot || '';
+        
+        showAlert('success', '¡Datos de la serie cargados automáticamente desde IMDb!', 'series');
+    } else if (data && data.type !== 'series') {
+        showAlert('error', 'Este ID corresponde a una película o episodio, no a una serie', 'series');
+    } else {
+        showAlert('error', 'No se pudieron obtener datos de IMDb para este ID', 'series');
+    }
+    
+    showLoading(false);
+}
+
+// CONFIGURAR EVENTOS ADICIONALES PARA AUTOCOMPLETADO
+// Agregar estos event listeners después de que se cargue el DOM
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Esperar un poco para asegurar que todos los elementos estén listos
+    setTimeout(function() {
+        // Autocompletar película cuando se ingresa ID
+        const movieIdInput = document.getElementById('movieId');
+        let movieIdTimeout;
+        
+        if (movieIdInput) {
+            movieIdInput.addEventListener('input', function() {
+                clearTimeout(movieIdTimeout);
+                const imdbId = this.value.trim();
+                
+                if (imdbId && imdbId.startsWith('tt') && imdbId.length >= 9) {
+                    movieIdTimeout = setTimeout(() => {
+                        autofillMovieData(imdbId);
+                    }, 1000); // Esperar 1 segundo después de dejar de escribir
+                }
+            });
+            
+            movieIdInput.addEventListener('blur', function() {
+                const imdbId = this.value.trim();
+                if (imdbId && imdbId.startsWith('tt') && imdbId.length >= 9) {
+                    clearTimeout(movieIdTimeout);
+                    autofillMovieData(imdbId);
+                }
+            });
+        }
+        
+        // Autocompletar serie cuando se ingresa ID
+        const seriesIdInput = document.getElementById('seriesId');
+        let seriesIdTimeout;
+        
+        if (seriesIdInput) {
+            seriesIdInput.addEventListener('input', function() {
+                clearTimeout(seriesIdTimeout);
+                const imdbId = this.value.trim();
+                
+                if (imdbId && imdbId.startsWith('tt') && imdbId.length >= 9) {
+                    seriesIdTimeout = setTimeout(() => {
+                        autofillSeriesData(imdbId);
+                    }, 1000);
+                }
+            });
+            
+            seriesIdInput.addEventListener('blur', function() {
+                const imdbId = this.value.trim();
+                if (imdbId && imdbId.startsWith('tt') && imdbId.length >= 9) {
+                    clearTimeout(seriesIdTimeout);
+                    autofillSeriesData(imdbId);
+                }
+            });
+        }
+    }, 500);
+});
+
+
+
+
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
