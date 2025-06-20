@@ -130,10 +130,11 @@ async function readFromGitHub(filename) {
   }
 }
 
-// Escribir archivo a GitHub
+// Escribir archivo a GitHub - MODIFICADO para minificar JSON
 async function writeToGitHub(filename, data) {
   try {
-    const content = Buffer.from(JSON.stringify(data, null, 2)).toString('base64');
+    // Cambiado de JSON.stringify(data, null, 2) a JSON.stringify(data) para minificar
+    const content = Buffer.from(JSON.stringify(data)).toString('base64');
     const path = `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filename}`;
     
     const payload = {
@@ -153,7 +154,7 @@ async function writeToGitHub(filename, data) {
     // Actualizar SHA para futuras actualizaciones
     fileSHAs[filename] = response.content.sha;
     
-    console.log(`✅ Archivo ${filename} guardado en GitHub`);
+    console.log(`✅ Archivo ${filename} guardado en GitHub (minificado)`);
     return response;
   } catch (error) {
     console.error(`❌ Error guardando ${filename} en GitHub:`, error.message);
