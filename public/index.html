@@ -794,11 +794,20 @@
         async function handleEpisodeSubmit(e) {
             e.preventDefault();
             
+            const seriesId = document.getElementById('episodeSeriesSelect').value;
+            const season = document.getElementById('episodeSeason').value;
+            const episode = document.getElementById('episodeNumber').value;
+            
+            if (!seriesId) {
+                showAlert('error', 'Debes seleccionar una serie', 'episodes');
+                return;
+            }
+            
             const episodeData = {
-                seriesId: document.getElementById('episodeSeriesSelect').value,
+                seriesId: seriesId,
                 name: document.getElementById('episodeName').value,
-                season: document.getElementById('episodeSeason').value,
-                episode: document.getElementById('episodeNumber').value,
+                season: parseInt(season),
+                episode: parseInt(episode),
                 year: document.getElementById('episodeYear').value,
                 runtime: document.getElementById('episodeRuntime').value,
                 poster: document.getElementById('episodePoster').value,
@@ -807,6 +816,8 @@
                 language: document.getElementById('episodeLanguage').value,
                 description: document.getElementById('episodeDescription').value
             };
+            
+            console.log('Enviando episodio:', episodeData);
             
             showLoading(true);
             try {
@@ -817,16 +828,29 @@
                 });
                 
                 const result = await response.json();
+                console.log('Respuesta del servidor:', result);
                 
                 if (response.ok) {
                     showAlert('success', result.message, 'episodes');
                     document.getElementById('episodeForm').reset();
                     document.getElementById('episodeLanguage').value = 'Español'; // Resetear idioma por defecto
                     loadContent();
+                    
+                    // Debug: verificar que el episodio se guardó
+                    setTimeout(async () => {
+                        try {
+                            const debugResponse = await fetch(`/api/debug/series/${seriesId}/episodes`);
+                            const debugData = await debugResponse.json();
+                            console.log('Episodios de la serie después de agregar:', debugData);
+                        } catch (error) {
+                            console.error('Error en debug:', error);
+                        }
+                    }, 1000);
                 } else {
                     showAlert('error', result.error, 'episodes');
                 }
             } catch (error) {
+                console.error('Error al agregar episodio:', error);
                 showAlert('error', 'Error al agregar episodio', 'episodes');
             }
             showLoading(false);
@@ -924,13 +948,18 @@
             
             container.innerHTML = Object.entries(episodesBySeries).map(([seriesId, data]) => `
                 <div style="margin-bottom: 30px;">
-                    <h3 style="color: #333; margin-bottom: 15px;">📺 ${data.seriesName}</h3>
+                    <h3 style="color: #333; margin-bottom: 15px;">
+                        📺 ${data.seriesName} 
+                        <button onclick="debugSeries('${seriesId}')" style="margin-left: 10px; font-size: 12px; padding: 2px 6px;">🔍 Debug</button>
+                    </h3>
                     ${data.episodes.sort((a, b) => a.season - b.season || a.episode - b.episode).map(episode => `
                         <div class="content-item" style="margin-left: 20px;">
                             <div class="content-info">
                                 <h4>T${episode.season}E${episode.episode} - ${episode.name}</h4>
                                 <p>${episode.year || 'Sin año'} • ${episode.quality || 'Sin calidad'} • ${episode.language || 'Sin idioma'}</p>
                                 <p><strong>Duración:</strong> ${episode.runtime || 'Sin especificar'} min</p>
+                                <p><strong>URL:</strong> ${episode.url ? '✅ Configurada' : '❌ Falta URL'}</p>
+                                <p style="font-size: 12px; color: #666;"><strong>ID generado:</strong> ${episode.seriesId}:${episode.season}:${episode.episode}</p>
                             </div>
                             <div class="content-actions">
                                 <button class="btn btn-danger" onclick="deleteEpisode('${episode.seriesId}', ${episode.season}, ${episode.episode})">🗑️ Eliminar</button>
@@ -939,6 +968,19 @@
                     `).join('')}
                 </div>
             `).join('');
+        }
+
+        // Función de debug para series
+        async function debugSeries(seriesId) {
+            try {
+                const response = await fetch(`/api/debug/meta/${seriesId}`);
+                const data = await response.json();
+                console.log('🔍 Debug de serie:', data);
+                alert(`Debug de serie:\n\nSerie: ${data.series.name}\nEpisodios: ${data.episodeCount}\nVideos generados: ${data.videos.length}\n\nRevisa la consola para más detalles.`);
+            } catch (error) {
+                console.error('Error en debug:', error);
+                alert('Error al obtener información de debug');
+            }
         }
 
         // Eliminar contenido
