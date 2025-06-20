@@ -1046,972 +1046,383 @@ Reemplaza TU_API_KEY_AQUI con tu API key de TMDB
 
 <script>
 <script>
-
-const TMDB_API_KEY = 'ed52d6c5a797006699cdcc63ed1208d5'; // ⚠️ CAMBIA ESTO POR TU API KEY
-
-// ==== CLIENTE TMDB ====
-
-class TMDBClient {
-
-    constructor() {
-
-        this.apiKey = TMDB_API_KEY;
-
-        this.baseURL = 'https://api.themoviedb.org/3';
-
-        this.imageBaseURL = 'https://image.tmdb.org/t/p/w500';
-
-        this.backdropBaseURL = 'https://image.tmdb.org/t/p/w1280';
-
-        this.logoBaseURL = 'https://image.tmdb.org/t/p/original';
-
-    }
-
-    // ✨ NUEVA: Búsqueda por nombre de película
-    async searchMovieByName(movieName) {
-        if (!this.apiKey || this.apiKey === 'TU_API_KEY_AQUI') {
-            throw new Error('❌ API Key de TMDB no configurada');
-        }
-
-        console.log('🔍 Buscando película por nombre:', movieName);
-
-        try {
-            const response = await fetch(
-                `${this.baseURL}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(movieName)}&language=es-MX&page=1`
-            );
-
-            if (!response.ok) {
-                throw new Error(`Error en búsqueda: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('🎬 Resultados de búsqueda:', data);
-
-            if (data.results && data.results.length > 0) {
-                // Retornar el primer resultado (más relevante)
-                const movie = data.results[0];
-                return {
-                    id: movie.id,
-                    imdb_id: null, // Lo obtendremos después
-                    title: movie.title,
-                    year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
-                    poster: movie.poster_path ? `${this.imageBaseURL}${movie.poster_path}` : null
-                };
-            } else {
-                throw new Error('❓ No se encontraron películas con ese nombre');
-            }
-        } catch (error) {
-            console.error('💥 Error en búsqueda por nombre:', error);
-            throw error;
-        }
-    }
-
-    // ✨ NUEVA: Búsqueda por nombre de serie
-    async searchTVByName(seriesName) {
-        if (!this.apiKey || this.apiKey === 'TU_API_KEY_AQUI') {
-            throw new Error('❌ API Key de TMDB no configurada');
-        }
-
-        console.log('🔍 Buscando serie por nombre:', seriesName);
-
-        try {
-            const response = await fetch(
-                `${this.baseURL}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(seriesName)}&language=es-MX&page=1`
-            );
-
-            if (!response.ok) {
-                throw new Error(`Error en búsqueda: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('📺 Resultados de búsqueda:', data);
-
-            if (data.results && data.results.length > 0) {
-                // Retornar el primer resultado (más relevante)
-                const tv = data.results[0];
-                return {
-                    id: tv.id,
-                    imdb_id: null, // Lo obtendremos después
-                    title: tv.name,
-                    year: tv.first_air_date ? new Date(tv.first_air_date).getFullYear() : null,
-                    poster: tv.poster_path ? `${this.imageBaseURL}${tv.poster_path}` : null
-                };
-            } else {
-                throw new Error('❓ No se encontraron series con ese nombre');
-            }
-        } catch (error) {
-            console.error('💥 Error en búsqueda por nombre:', error);
-            throw error;
-        }
-    }
-
-    // ✨ NUEVA: Obtener ID de IMDB desde detalles de película
-    async getMovieIMDBId(movieId) {
-        try {
-            const response = await fetch(
-                `${this.baseURL}/movie/${movieId}/external_ids?api_key=${this.apiKey}`
-            );
-
-            if (!response.ok) {
-                throw new Error(`Error obteniendo IMDB ID: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('🆔 IDs externos de película:', data);
-            
-            return data.imdb_id || null;
-        } catch (error) {
-            console.warn('⚠️ No se pudo obtener IMDB ID:', error);
-            return null;
-        }
-    }
-
-    // ✨ NUEVA: Obtener ID de IMDB desde detalles de serie
-    async getTVIMDBId(tvId) {
-        try {
-            const response = await fetch(
-                `${this.baseURL}/tv/${tvId}/external_ids?api_key=${this.apiKey}`
-            );
-
-            if (!response.ok) {
-                throw new Error(`Error obteniendo IMDB ID: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log('🆔 IDs externos de serie:', data);
-            
-            return data.imdb_id || null;
-        } catch (error) {
-            console.warn('⚠️ No se pudo obtener IMDB ID:', error);
-            return null;
-        }
-    }
-
-    async searchByIMDB(imdbId) {
-
-        if (!this.apiKey || this.apiKey === 'TU_API_KEY_AQUI') {
-
-            throw new Error('❌ API Key de TMDB no configurada. Edita el script y cambia TU_API_KEY_AQUI por tu API key real.');
-
-        }
-
-        console.log('🔍 Buscando:', imdbId);
-
-        try {
-
-            const response = await fetch(
-
-                `${this.baseURL}/find/${imdbId}?api_key=${this.apiKey}&external_source=imdb_id&language=es-MX`
-
-            );
-
-            console.log('📡 Respuesta:', response.status);
-
-            if (!response.ok) {
-
-                if (response.status === 401) {
-
-                    throw new Error('🔑 API Key inválida. Verifica tu API key de TMDB.');
-
-                }
-
-                if (response.status === 404) {
-
-                    throw new Error('❓ No se encontró contenido con ese ID de IMDB.');
-
-                }
-
-                throw new Error(`❌ Error HTTP: ${response.status}`);
-
-            }
-
-            const data = await response.json();
-
-            console.log('📦 Datos recibidos:', data);
-
-            
-
-            if (data.movie_results && data.movie_results.length > 0) {
-
-                return await this.getMovieDetails(data.movie_results[0].id);
-
-            } else if (data.tv_results && data.tv_results.length > 0) {
-
-                return await this.getTVDetails(data.tv_results[0].id);
-
-            } else {
-
-                throw new Error('❓ No se encontró contenido con ese ID de IMDB');
-
-            }
-
-        } catch (error) {
-
-            console.error('💥 Error en búsqueda:', error);
-
-            throw error;
-
-        }
-
-    }
-
-    async getMovieImages(movieId) {
-        try {
-            const response = await fetch(
-                `${this.baseURL}/movie/${movieId}/images?api_key=${this.apiKey}`
-            );
-            
-            if (!response.ok) {
-                console.warn('⚠️ No se pudieron obtener imágenes adicionales');
-                return null;
-            }
-            
-            const images = await response.json();
-            console.log('🖼️ Imágenes disponibles:', images);
-            
-            let logo = null;
-            if (images.logos && images.logos.length > 0) {
-                logo = images.logos.find(l => l.iso_639_1 === 'en') || 
-                       images.logos.find(l => l.iso_639_1 === null) ||
-                       images.logos[0];
-            }
-            
-            return {
-                logo: logo ? `${this.logoBaseURL}${logo.file_path}` : null
-            };
-        } catch (error) {
-            console.warn('⚠️ Error obteniendo imágenes:', error);
-            return null;
-        }
-    }
-
-    async getTVImages(tvId) {
-        try {
-            const response = await fetch(
-                `${this.baseURL}/tv/${tvId}/images?api_key=${this.apiKey}`
-            );
-            
-            if (!response.ok) {
-                console.warn('⚠️ No se pudieron obtener imágenes adicionales');
-                return null;
-            }
-            
-            const images = await response.json();
-            console.log('🖼️ Imágenes de serie disponibles:', images);
-            
-            let logo = null;
-            if (images.logos && images.logos.length > 0) {
-                logo = images.logos.find(l => l.iso_639_1 === 'en') || 
-                       images.logos.find(l => l.iso_639_1 === null) ||
-                       images.logos[0];
-            }
-            
-            return {
-                logo: logo ? `${this.logoBaseURL}${logo.file_path}` : null
-            };
-        } catch (error) {
-            console.warn('⚠️ Error obteniendo imágenes de serie:', error);
-            return null;
-        }
-    }
-
-    async getMovieDetails(movieId) {
-
-        const response = await fetch(
-
-            `${this.baseURL}/movie/${movieId}?api_key=${this.apiKey}&language=es-MX&append_to_response=credits`
-
-        );
-
-        if (!response.ok) {
-
-            throw new Error(`Error obteniendo detalles de película: ${response.status}`);
-
-        }
-
-        const movie = await response.json();
-
-        console.log('🎬 Detalles de película:', movie);
-
-        const images = await this.getMovieImages(movieId);
-
-        return {
-
-            type: 'movie',
-
-            name: movie.title,
-
-            year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
-
-            runtime: movie.runtime,
-
-            genre: movie.genres.map(g => g.name).join(', '),
-
-            director: movie.credits.crew
-
-                .filter(person => person.job === 'Director')
-
-                .map(person => person.name)
-
-                .join(', '),
-
-            cast: movie.credits.cast
-
-                .slice(0, 5)
-
-                .map(person => person.name)
-
-                .join(', '),
-
-            imdbRating: movie.vote_average,
-
-            poster: movie.poster_path ? `${this.imageBaseURL}${movie.poster_path}` : '',
-
-            background: movie.backdrop_path ? `${this.backdropBaseURL}${movie.backdrop_path}` : '',
-
-            logo: images?.logo || '',
-
-            description: movie.overview
-
-        };
-
-    }
-
-    async getTVDetails(tvId) {
-
-        const response = await fetch(
-
-            `${this.baseURL}/tv/${tvId}?api_key=${this.apiKey}&language=es-MX&append_to_response=credits`
-
-        );
-
-        if (!response.ok) {
-
-            throw new Error(`Error obteniendo detalles de serie: ${response.status}`);
-
-        }
-
-        const tv = await response.json();
-
-        console.log('📺 Detalles de serie:', tv);
-
-        const images = await this.getTVImages(tvId);
-
-        return {
-
-            type: 'tv',
-
-            name: tv.name,
-
-            year: tv.first_air_date ? new Date(tv.first_air_date).getFullYear() : null,
-
-            runtime: tv.episode_run_time && tv.episode_run_time.length > 0 ? tv.episode_run_time[0] : null,
-
-            genre: tv.genres.map(g => g.name).join(', '),
-
-            director: tv.created_by.map(person => person.name).join(', '),
-
-            cast: tv.credits.cast
-
-                .slice(0, 5)
-
-                .map(person => person.name)
-
-                .join(', '),
-
-            imdbRating: tv.vote_average,
-
-            poster: tv.poster_path ? `${this.imageBaseURL}${tv.poster_path}` : '',
-
-            background: tv.backdrop_path ? `${this.backdropBaseURL}${tv.backdrop_path}` : '',
-
-            logo: images?.logo || '',
-
-            description: tv.overview
-
-        };
-
-    }
-
+const TMDB_API_KEY='ed52d6c5a797006699cdcc63ed1208d5';
+class TMDBClient{
+constructor(){
+this.apiKey=TMDB_API_KEY;
+this.baseURL='https://api.themoviedb.org/3';
+this.imageBaseURL='https://image.tmdb.org/t/p/w500';
+this.backdropBaseURL='https://image.tmdb.org/t/p/w1280';
+this.logoBaseURL='https://image.tmdb.org/t/p/original';
 }
 
-// ==== INICIALIZACIÓN ====
+// Nueva función para buscar por nombre
+async searchByName(query, type = 'multi') {
+if(!this.apiKey||this.apiKey==='TU_API_KEY_AQUI') throw new Error('API Key de TMDB no configurada');
 
-const tmdbClient = new TMDBClient();
-
-// ==== FUNCIONES DE UTILIDAD ====
-
-function showMessage(message, type = 'info') {
-
-    const existing = document.querySelector('.tmdb-message');
-
-    if (existing) existing.remove();
-
+const endpoint = type === 'multi' ? 'search/multi' : `search/${type}`;
+const response = await fetch(`${this.baseURL}/${endpoint}?api_key=${this.apiKey}&query=${encodeURIComponent(query)}&language=es-MX&include_adult=false`);
     
-
-    const messageDiv = document.createElement('div');
-
-    messageDiv.className = 'tmdb-message';
-
-    messageDiv.textContent = message;
-
+if(!response.ok){
+if(response.status===401) throw new Error('API Key inválida');
+throw new Error(`Error HTTP: ${response.status}`);
+}
     
-
-    const colors = {
-
-        success: '#d4edda',
-
-        error: '#f8d7da',
-
-        warning: '#fff3cd',
-
-        info: '#d1ecf1'
-
-    };
-
-    
-
-    messageDiv.style.cssText = `
-
-        position: fixed;
-
-        top: 20px;
-
-        right: 20px;
-
-        background: ${colors[type]};
-
-        padding: 10px 15px;
-
-        border-radius: 5px;
-
-        border-left: 4px solid ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8'};
-
-        z-index: 10000;
-
-        font-size: 14px;
-
-        max-width: 300px;
-
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-
-    `;
-
-    
-
-    document.body.appendChild(messageDiv);
-
-    
-
-    setTimeout(() => {
-
-        if (messageDiv.parentNode) {
-
-            messageDiv.remove();
-
-        }
-
-    }, 4000);
-
+const data = await response.json();
+return data.results || [];
 }
 
-function fillField(fieldId, value) {
-
-    const field = document.getElementById(fieldId);
-
-    if (field && !field.value && value) {
-
-        field.value = value;
-
-        field.style.backgroundColor = '#d4edda';
-
-        setTimeout(() => {
-
-            field.style.backgroundColor = '';
-
-        }, 1000);
-
-        console.log(`✅ Campo ${fieldId} completado:`, value);
-
-    }
-
+// Nueva función para obtener ID de IMDB desde detalles
+async getIMDBId(type, tmdbId) {
+try {
+const endpoint = type === 'movie' ? 'movie' : 'tv';
+const response = await fetch(`${this.baseURL}/${endpoint}/${tmdbId}/external_ids?api_key=${this.apiKey}`);
+if(!response.ok) return null;
+const data = await response.json();
+return data.imdb_id || null;
+} catch {
+return null;
+}
 }
 
-// ✨ NUEVA: Búsqueda inversa por nombre de película
-async function searchMovieByName(movieName) {
-    if (!movieName || movieName.trim().length < 2) {
-        console.log('❌ Nombre de película muy corto:', movieName);
-        return;
-    }
-
-    try {
-        showMessage('🔍 Buscando película por nombre...', 'info');
-        console.log('🎬 Buscando película:', movieName);
-
-        const searchResult = await tmdbClient.searchMovieByName(movieName.trim());
-        
-        if (searchResult) {
-            // Obtener el IMDB ID
-            const imdbId = await tmdbClient.getMovieIMDBId(searchResult.id);
-            
-            if (imdbId) {
-                console.log('🆔 IMDB ID encontrado:', imdbId);
-                
-                // Completar el campo de ID automáticamente
-                fillField('movieId', imdbId);
-                
-                // Autocompletar todos los datos
-                await autoFillMovie(imdbId);
-                
-                showMessage(`✅ Película encontrada: ${searchResult.title} (${searchResult.year})`, 'success');
-            } else {
-                showMessage(`⚠️ Película encontrada pero sin IMDB ID: ${searchResult.title}`, 'warning');
-            }
-        }
-    } catch (error) {
-        console.error('💥 Error en búsqueda por nombre:', error);
-        showMessage(error.message, 'error');
-    }
+async searchByIMDB(imdbId){
+if(!this.apiKey||this.apiKey==='TU_API_KEY_AQUI') throw new Error('API Key de TMDB no configurada');
+const response=await fetch(`${this.baseURL}/find/${imdbId}?api_key=${this.apiKey}&external_source=imdb_id&language=es-MX`);
+if(!response.ok){
+if(response.status===401) throw new Error('API Key inválida');
+if(response.status===404) throw new Error('No se encontró contenido con ese ID');
+throw new Error(`Error HTTP: ${response.status}`);
+}
+const data=await response.json();
+if(data.movie_results?.length>0) return await this.getMovieDetails(data.movie_results[0].id);
+if(data.tv_results?.length>0) return await this.getTVDetails(data.tv_results[0].id);
+throw new Error('No se encontró contenido con ese ID');
 }
 
-// ✨ NUEVA: Búsqueda inversa por nombre de serie
-async function searchTVByName(seriesName) {
-    if (!seriesName || seriesName.trim().length < 2) {
-        console.log('❌ Nombre de serie muy corto:', seriesName);
-        return;
-    }
-
-    try {
-        showMessage('🔍 Buscando serie por nombre...', 'info');
-        console.log('📺 Buscando serie:', seriesName);
-
-        const searchResult = await tmdbClient.searchTVByName(seriesName.trim());
-        
-        if (searchResult) {
-            // Obtener el IMDB ID
-            const imdbId = await tmdbClient.getTVIMDBId(searchResult.id);
-            
-            if (imdbId) {
-                console.log('🆔 IMDB ID encontrado:', imdbId);
-                
-                // Completar el campo de ID automáticamente
-                fillField('seriesId', imdbId);
-                
-                // Autocompletar todos los datos
-                await autoFillSeries(imdbId);
-                
-                showMessage(`✅ Serie encontrada: ${searchResult.title} (${searchResult.year})`, 'success');
-            } else {
-                showMessage(`⚠️ Serie encontrada pero sin IMDB ID: ${searchResult.title}`, 'warning');
-            }
-        }
-    } catch (error) {
-        console.error('💥 Error en búsqueda por nombre:', error);
-        showMessage(error.message, 'error');
-    }
+async getImages(type,id){
+try{
+const response=await fetch(`${this.baseURL}/${type}/${id}/images?api_key=${this.apiKey}`);
+if(!response.ok) return null;
+const images=await response.json();
+if(!images.logos?.length) return null;
+const logo=images.logos.find(l=>l.iso_639_1==='en')||images.logos.find(l=>!l.iso_639_1)||images.logos[0];
+return logo?`${this.logoBaseURL}${logo.file_path}`:null;
+}catch{return null;}
 }
 
-// ==== FUNCIONES ORIGINALES DE AUTOCOMPLETADO ====
-
-async function autoFillMovie(imdbId) {
-
-    if (!imdbId || !imdbId.startsWith('tt')) {
-
-        console.log('❌ ID de IMDB inválido:', imdbId);
-
-        return;
-
-    }
-
-    
-
-    try {
-
-        showMessage('🔄 Buscando información de película...', 'info');
-
-        console.log('🎬 Buscando película:', imdbId);
-
-        
-
-        const movieData = await tmdbClient.searchByIMDB(imdbId);
-
-        
-
-        if (movieData.type !== 'movie') {
-
-            showMessage('❌ El ID corresponde a una serie, no a una película', 'error');
-
-            return;
-
-        }
-
-        
-
-        console.log('📊 Datos a completar:', movieData);
-
-        
-
-        fillField('movieName', movieData.name);
-
-        fillField('movieYear', movieData.year);
-
-        fillField('movieRuntime', movieData.runtime);
-
-        fillField('movieGenre', movieData.genre);
-
-        fillField('movieDirector', movieData.director);
-
-        fillField('movieCast', movieData.cast);
-
-        fillField('movieRating', movieData.imdbRating?.toFixed(1));
-
-        fillField('moviePoster', movieData.poster);
-
-        fillField('movieBackground', movieData.background);
-
-        fillField('movieLogo', movieData.logo);
-
-        fillField('movieDescription', movieData.description);
-
-        
-
-        if (movieData.logo) {
-            console.log('🎨 Logo encontrado:', movieData.logo);
-            showMessage('✅ Información de película cargada (con logo)', 'success');
-        } else {
-            console.log('⚠️ No se encontró logo para esta película');
-            showMessage('✅ Información de película cargada (sin logo)', 'warning');
-        }
-
-        
-
-    } catch (error) {
-
-        console.error('💥 Error en autocompletado:', error);
-
-        showMessage(error.message, 'error');
-
-    }
-
+async getMovieDetails(movieId){
+const response=await fetch(`${this.baseURL}/movie/${movieId}?api_key=${this.apiKey}&language=es-MX&append_to_response=credits`);
+if(!response.ok) throw new Error(`Error obteniendo detalles: ${response.status}`);
+const movie=await response.json();
+const logo=await this.getImages('movie',movieId);
+const imdbId = await this.getIMDBId('movie', movieId);
+return{
+type:'movie',
+name:movie.title,
+year:movie.release_date?new Date(movie.release_date).getFullYear():null,
+runtime:movie.runtime,
+genre:movie.genres.map(g=>g.name).join(', '),
+director:movie.credits.crew.filter(p=>p.job==='Director').map(p=>p.name).join(', '),
+cast:movie.credits.cast.slice(0,5).map(p=>p.name).join(', '),
+imdbRating:movie.vote_average,
+poster:movie.poster_path?`${this.imageBaseURL}${movie.poster_path}`:'',
+background:movie.backdrop_path?`${this.backdropBaseURL}${movie.backdrop_path}`:'',
+logo:logo||'',
+description:movie.overview,
+imdbId: imdbId
+};
 }
 
-async function autoFillSeries(imdbId) {
-
-    if (!imdbId || !imdbId.startsWith('tt')) {
-
-        console.log('❌ ID de IMDB inválido:', imdbId);
-
-        return;
-
-    }
-
-    
-
-    try {
-
-        showMessage('🔄 Buscando información de serie...', 'info');
-
-        console.log('📺 Buscando serie:', imdbId);
-
-        
-
-        const seriesData = await tmdbClient.searchByIMDB(imdbId);
-
-        
-
-        if (seriesData.type !== 'tv') {
-
-            showMessage('❌ El ID corresponde a una película, no a una serie', 'error');
-
-            return;
-
-        }
-
-        
-
-        console.log('📊 Datos a completar:', seriesData);
-
-        
-
-        fillField('seriesName', seriesData.name);
-
-        fillField('seriesYear', seriesData.year);
-
-        fillField('seriesRuntime', seriesData.runtime);
-
-        fillField('seriesGenre', seriesData.genre);
-
-        fillField('seriesDirector', seriesData.director);
-
-        fillField('seriesCast', seriesData.cast);
-
-        fillField('seriesRating', seriesData.imdbRating?.toFixed(1));
-
-        fillField('seriesPoster', seriesData.poster);
-
-        fillField('seriesBackground', seriesData.background);
-
-        fillField('seriesLogo', seriesData.logo);
-
-        fillField('seriesDescription', seriesData.description);
-
-        
-
-        if (seriesData.logo) {
-            console.log('🎨 Logo de serie encontrado:', seriesData.logo);
-            showMessage('✅ Información de serie cargada (con logo)', 'success');
-        } else {
-            console.log('⚠️ No se encontró logo para esta serie');
-            showMessage('✅ Información de serie cargada (sin logo)', 'warning');
-        }
-
-        
-
-    } catch (error) {
-
-        console.error('💥 Error en autocompletado:', error);
-
-        showMessage(error.message, 'error');
-
-    }
-
+async getTVDetails(tvId){
+const response=await fetch(`${this.baseURL}/tv/${tvId}?api_key=${this.apiKey}&language=es-MX&append_to_response=credits`);
+if(!response.ok) throw new Error(`Error obteniendo detalles: ${response.status}`);
+const tv=await response.json();
+const logo=await this.getImages('tv',tvId);
+const imdbId = await this.getIMDBId('tv', tvId);
+return{
+type:'tv',
+name:tv.name,
+year:tv.first_air_date?new Date(tv.first_air_date).getFullYear():null,
+runtime:tv.episode_run_time?.length>0?tv.episode_run_time[0]:null,
+genre:tv.genres.map(g=>g.name).join(', '),
+director:tv.created_by.map(p=>p.name).join(', '),
+cast:tv.credits.cast.slice(0,5).map(p=>p.name).join(', '),
+imdbRating:tv.vote_average,
+poster:tv.poster_path?`${this.imageBaseURL}${tv.poster_path}`:'',
+background:tv.backdrop_path?`${this.backdropBaseURL}${tv.backdrop_path}`:'',
+logo:logo||'',
+description:tv.overview,
+imdbId: imdbId
+};
+}
 }
 
-// ==== CONFIGURACIÓN DE EVENTOS ====
+const tmdbClient=new TMDBClient();
 
-document.addEventListener('DOMContentLoaded', function() {
+function showMessage(message,type='info'){
+const existing=document.querySelector('.tmdb-message');
+if(existing) existing.remove();
+const messageDiv=document.createElement('div');
+messageDiv.className='tmdb-message';
+messageDiv.textContent=message;
+const colors={success:'#d4edda',error:'#f8d7da',warning:'#fff3cd',info:'#d1ecf1'};
+messageDiv.style.cssText=`position:fixed;top:20px;right:20px;background:${colors[type]};padding:10px 15px;border-radius:5px;border-left:4px solid ${type==='success'?'#28a745':type==='error'?'#dc3545':'#17a2b8'};z-index:10000;font-size:14px;max-width:300px;box-shadow:0 2px 10px rgba(0,0,0,0.1)`;
+document.body.appendChild(messageDiv);
+setTimeout(()=>messageDiv.remove(),4000);
+}
 
-    console.log('🚀 Autocompletado TMDB con búsqueda inversa iniciado');
+function fillField(fieldId,value){
+const field=document.getElementById(fieldId);
+if(field&&!field.value&&value){
+field.value=value;
+field.style.backgroundColor='#d4edda';
+setTimeout(()=>field.style.backgroundColor='',1000);
+}
+}
 
+// Nueva función para mostrar selector de resultados
+function showResultSelector(results, type, inputField) {
+// Remover selector existente si hay uno
+const existing = document.querySelector('.tmdb-selector');
+if(existing) existing.remove();
+
+const selector = document.createElement('div');
+selector.className = 'tmdb-selector';
+selector.style.cssText = `
+position: absolute;
+background: white;
+border: 1px solid #ccc;
+border-radius: 4px;
+box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+max-height: 200px;
+overflow-y: auto;
+z-index: 1000;
+width: 100%;
+margin-top: 2px;
+`;
+
+results.forEach((result, index) => {
+const option = document.createElement('div');
+option.style.cssText = `
+padding: 10px;
+cursor: pointer;
+border-bottom: 1px solid #eee;
+display: flex;
+align-items: center;
+`;
+option.addEventListener('mouseenter', () => option.style.backgroundColor = '#f5f5f5');
+option.addEventListener('mouseleave', () => option.style.backgroundColor = '');
+
+const img = document.createElement('img');
+img.src = result.poster_path ? `${tmdbClient.imageBaseURL}${result.poster_path}` : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="60" fill="%23ccc"><rect width="40" height="60" fill="%23f0f0f0"/><text x="20" y="35" text-anchor="middle" fill="%23999" font-size="10">Sin imagen</text></svg>';
+img.style.cssText = 'width: 40px; height: 60px; margin-right: 10px; object-fit: cover; border-radius: 2px;';
+img.onerror = () => img.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="60" fill="%23ccc"><rect width="40" height="60" fill="%23f0f0f0"/><text x="20" y="35" text-anchor="middle" fill="%23999" font-size="10">Sin imagen</text></svg>';
+
+const info = document.createElement('div');
+const title = result.title || result.name;
+const year = result.release_date ? new Date(result.release_date).getFullYear() : 
+             result.first_air_date ? new Date(result.first_air_date).getFullYear() : '';
+const mediaType = result.media_type === 'movie' ? '🎬' : result.media_type === 'tv' ? '📺' : '🎭';
     
+info.innerHTML = `
+<div style="font-weight: bold; color: #333;">${mediaType} ${title}</div>
+<div style="font-size: 12px; color: #666;">${year ? `(${year})` : 'Año desconocido'}</div>
+<div style="font-size: 11px; color: #999;">Rating: ${result.vote_average?.toFixed(1) || 'N/A'}/10</div>
+`;
 
-    // ✨ NUEVO: Campo de nombre de película para búsqueda inversa
-    const movieNameInput = document.getElementById('movieName');
-    if (movieNameInput) {
-        console.log('✅ Campo movieName encontrado - configurando búsqueda inversa');
-        
-        // Agregar botón de búsqueda inversa
-        const movieNameContainer = movieNameInput.parentElement;
-        const searchMovieBtn = document.createElement('button');
-        searchMovieBtn.type = 'button';
-        searchMovieBtn.textContent = '🔍 Buscar por nombre';
-        searchMovieBtn.style.cssText = 'margin-top: 8px; margin-right: 8px; padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;';
-        searchMovieBtn.onclick = () => searchMovieByName(movieNameInput.value.trim());
-        movieNameContainer.appendChild(searchMovieBtn);
-        
-        // Búsqueda automática al salir del campo (después de 3 caracteres)
-        movieNameInput.addEventListener('blur', function() {
-            if (this.value.trim().length >= 3) {
-                searchMovieByName(this.value.trim());
-            }
-        });
-    }
+option.appendChild(img);
+option.appendChild(info);
 
-    // ✨ NUEVO: Campo de nombre de serie para búsqueda inversa
-    const seriesNameInput = document.getElementById('seriesName');
-    if (seriesNameInput) {
-        console.log('✅ Campo seriesName encontrado - configurando búsqueda inversa');
-        
-        // Agregar botón de búsqueda inversa
-        const seriesNameContainer = seriesNameInput.parentElement;
-        const searchSeriesBtn = document.createElement('button');
-        searchSeriesBtn.type = 'button';
-        searchSeriesBtn.textContent = '🔍 Buscar por nombre';
-        searchSeriesBtn.style.cssText = 'margin-top: 8px; margin-right: 8px; padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;';
-        searchSeriesBtn.onclick = () => searchTVByName(seriesNameInput.value.trim());
-        seriesNameContainer.appendChild(searchSeriesBtn);
-        
-        // Búsqueda automática al salir del campo (después de 3 caracteres)
-        seriesNameInput.addEventListener('blur', function() {
-            if (this.value.trim().length >= 3) {
-                searchTVByName(this.value.trim());
-            }
-        });
-    }
-    
-    // Campo de película (funcionalidad original)
-
-    const movieIdInput = document.getElementById('movieId');
-
-    if (movieIdInput) {
-
-        console.log('✅ Campo movieId encontrado');
-
-        
-
-        const movieContainer = movieIdInput.parentElement;
-
-        const movieBtn = document.createElement('button');
-
-        movieBtn.type = 'button';
-
-        movieBtn.textContent = '🔄 Autocompletar desde TMDB';
-
-        movieBtn.style.cssText = 'margin-top: 8px; padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;';
-
-        movieBtn.onclick = () => autoFillMovie(movieIdInput.value.trim());
-
-        movieContainer.appendChild(movieBtn);
-
-        
-
-        movieIdInput.addEventListener('blur', function() {
-
-            if (this.value.trim()) {
-
-                autoFillMovie(this.value.trim());
-
-            }
-
-        });
-
-    } else {
-
-        console.log('❌ Campo movieId NO encontrado');
-
-    }
-
-    
-
-    // Campo de serie (funcionalidad original)
-
-    const seriesIdInput = document.getElementById('seriesId');
-
-    if (seriesIdInput) {
-
-        console.log('✅ Campo seriesId encontrado');
-
-        
-
-        const seriesContainer = seriesIdInput.parentElement;
-
-        const seriesBtn = document.createElement('button');
-
-        seriesBtn.type = 'button';
-
-        seriesBtn.textContent = '🔄 Autocompletar desde TMDB';
-
-        seriesBtn.style.cssText = 'margin-top: 8px; padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;';
-
-        seriesBtn.onclick = () => autoFillSeries(seriesIdInput.value.trim());
-
-        seriesContainer.appendChild(seriesBtn);
-
-        
-
-        seriesIdInput.addEventListener('blur', function() {
-
-            if (this.value.trim()) {
-
-                autoFillSeries(this.value.trim());
-
-            }
-
-        });
-
-    } else {
-
-        console.log('❌ Campo seriesId NO encontrado');
-
-    }
-
-    
-
-    // Funciones de test para la consola
-
-    window.testTMDB = async function(imdbId) {
-
-        console.log('🧪 Test manual con ID:', imdbId);
-
-        try {
-
-            const result = await tmdbClient.searchByIMDB(imdbId || 'tt0111161');
-
-            console.log('✅ Test exitoso:', result);
-
-            console.log('🎨 URL del logo:', result.logo || 'No disponible');
-
-            return result;
-
-        } catch (error) {
-
-            console.error('❌ Test falló:', error);
-
-        }
-
-    };
-
-    // ✨ NUEVA: Función de test para búsqueda por nombre
-    window.testSearchMovie = async function(movieName) {
-        console.log('🧪 Test búsqueda de película:', movieName);
-        try {
-            await searchMovieByName(movieName || 'Avengers');
-        } catch (error) {
-            console.error('❌ Test de búsqueda falló:', error);
-        }
-    };
-
-    window.testSearchTV = async function(seriesName) {
-        console.log('🧪 Test búsqueda de serie:', seriesName);
-        try {
-            await searchTVByName(seriesName || 'Simpsons');
-        } catch (error) {
-            console.error('❌ Test de búsqueda falló:', error);
-        }
-    };
-
-    
-
-    console.log('💡 Funciones de test disponibles:');
-    console.log('   testTMDB("tt0111161") - Buscar por IMDB ID');
-    console.log('   testSearchMovie("Avengers") - Buscar película por nombre');
-    console.log('   testSearchTV("Simpsons") - Buscar serie por nombre');
-
+option.addEventListener('click', async () => {
+selector.remove();
+const resultType = result.media_type || (type === 'película' ? 'movie' : 'tv');
+await processSelectedResult(result, resultType, type, inputField);
 });
 
+selector.appendChild(option);
+});
+
+// Agregar opción para cerrar
+const closeOption = document.createElement('div');
+closeOption.style.cssText = `
+padding: 8px;
+text-align: center;
+color: #666;
+font-size: 12px;
+cursor: pointer;
+border-top: 2px solid #eee;
+background: #f9f9f9;
+`;
+closeOption.textContent = 'Cerrar (ESC)';
+closeOption.addEventListener('click', () => selector.remove());
+selector.appendChild(closeOption);
+
+// Posicionar el selector
+inputField.parentElement.style.position = 'relative';
+inputField.parentElement.appendChild(selector);
+
+// Cerrar con ESC
+document.addEventListener('keydown', function escHandler(e) {
+if(e.key === 'Escape') {
+selector.remove();
+document.removeEventListener('keydown', escHandler);
+}
+});
+}
+
+async function processSelectedResult(result, resultType, expectedType, inputField) {
+try {
+showMessage(`Obteniendo detalles completos...`, 'info');
+        
+let data;
+if(resultType === 'movie') {
+data = await tmdbClient.getMovieDetails(result.id);
+} else {
+data = await tmdbClient.getTVDetails(result.id);
+}
+
+// Verificar que el tipo coincida
+if((expectedType === 'película' && data.type !== 'movie') || 
+   (expectedType === 'serie' && data.type !== 'tv')) {
+showMessage(`Seleccionaste ${data.type === 'movie' ? 'una película' : 'una serie'}, pero el campo es para ${expectedType}`, 'error');
+return;
+}
+
+// Llenar el campo ID con el IMDB ID si está disponible
+if(data.imdbId && inputField) {
+inputField.value = data.imdbId;
+inputField.style.backgroundColor = '#d4edda';
+setTimeout(() => inputField.style.backgroundColor = '', 1000);
+}
+
+// Autocompletar los demás campos
+const prefix = expectedType === 'película' ? 'movie' : 'series';
+fillField(`${prefix}Name`, data.name);
+fillField(`${prefix}Year`, data.year);
+fillField(`${prefix}Runtime`, data.runtime);
+fillField(`${prefix}Genre`, data.genre);
+fillField(`${prefix}Director`, data.director);
+fillField(`${prefix}Cast`, data.cast);
+fillField(`${prefix}Rating`, data.imdbRating?.toFixed(1));
+fillField(`${prefix}Poster`, data.poster);
+fillField(`${prefix}Background`, data.background);
+fillField(`${prefix}Logo`, data.logo);
+fillField(`${prefix}Description`, data.description);
+
+showMessage(`Información de ${expectedType} cargada${data.logo ? ' (con logo)' : ' (sin logo)'}${data.imdbId ? ` - ID: ${data.imdbId}` : ''}`, data.logo ? 'success' : 'warning');
+
+} catch(error) {
+showMessage(`Error: ${error.message}`, 'error');
+}
+}
+
+async function autoFill(input, type) {
+const value = input.trim();
+if(!value) return;
+
+try {
+// Si es un ID de IMDB, usar la función original
+if(value.startsWith('tt')) {
+showMessage(`Buscando información de ${type} por ID IMDB...`, 'info');
+const data = await tmdbClient.searchByIMDB(value);
+            
+if(data.type !== (type === 'película' ? 'movie' : 'tv')) {
+showMessage(`El ID corresponde a ${data.type === 'movie' ? 'una película' : 'una serie'}, no a ${type}`, 'error');
+return;
+}
+            
+const prefix = type === 'película' ? 'movie' : 'series';
+fillField(`${prefix}Name`, data.name);
+fillField(`${prefix}Year`, data.year);
+fillField(`${prefix}Runtime`, data.runtime);
+fillField(`${prefix}Genre`, data.genre);
+fillField(`${prefix}Director`, data.director);
+fillField(`${prefix}Cast`, data.cast);
+fillField(`${prefix}Rating`, data.imdbRating?.toFixed(1));
+fillField(`${prefix}Poster`, data.poster);
+fillField(`${prefix}Background`, data.background);
+fillField(`${prefix}Logo`, data.logo);
+fillField(`${prefix}Description`, data.description);
+            
+showMessage(`Información de ${type} cargada${data.logo ? ' (con logo)' : ' (sin logo)'}`, data.logo ? 'success' : 'warning');
+} else {
+// Si no es un ID de IMDB, buscar por nombre
+showMessage(`Buscando "${value}"...`, 'info');
+const searchType = type === 'película' ? 'movie' : 'tv';
+const results = await tmdbClient.searchByName(value, searchType);
+            
+if(results.length === 0) {
+showMessage(`No se encontraron resultados para "${value}"`, 'warning');
+return;
+}
+            
+// Si hay múltiples resultados, mostrar selector
+if(results.length > 1) {
+showMessage(`Se encontraron ${results.length} resultados. Selecciona uno:`, 'info');
+const inputField = type === 'película' ? document.getElementById('movieId') : document.getElementById('seriesId');
+showResultSelector(results, type, inputField);
+} else {
+// Si hay solo un resultado, procesarlo directamente
+const result = results[0];
+const resultType = result.media_type || searchType;
+const inputField = type === 'película' ? document.getElementById('movieId') : document.getElementById('seriesId');
+await processSelectedResult(result, resultType, type, inputField);
+}
+}
+} catch(error) {
+showMessage(error.message, 'error');
+}
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+const movieIdInput = document.getElementById('movieId');
+const seriesIdInput = document.getElementById('seriesId');
+
+function createButton(text, onClick) {
+const btn = document.createElement('button');
+btn.type = 'button';
+btn.textContent = text;
+btn.style.cssText = 'margin-top:8px;padding:8px 12px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-size:13px';
+btn.onclick = onClick;
+return btn;
+}
+
+if(movieIdInput) {
+const movieBtn = createButton('🔄 Autocompletar desde TMDB', () => autoFill(movieIdInput.value.trim(), 'película'));
+movieIdInput.parentElement.appendChild(movieBtn);
+movieIdInput.addEventListener('blur', () => movieIdInput.value.trim() && autoFill(movieIdInput.value.trim(), 'película'));
+        
+// Agregar placeholder explicativo
+movieIdInput.placeholder = 'ID IMDB (tt1234567) o nombre de la película';
+}
+
+if(seriesIdInput) {
+const seriesBtn = createButton('🔄 Autocompletar desde TMDB', () => autoFill(seriesIdInput.value.trim(), 'serie'));
+seriesIdInput.parentElement.appendChild(seriesBtn);
+seriesIdInput.addEventListener('blur', () => seriesIdInput.value.trim() && autoFill(seriesIdInput.value.trim(), 'serie'));
+        
+// Agregar placeholder explicativo
+seriesIdInput.placeholder = 'ID IMDB (tt1234567) o nombre de la serie';
+}
+
+window.testTMDB = async function(query = 'Simpsons') {
+try {
+console.log('Buscando:', query);
+if(query.startsWith('tt')) {
+const result = await tmdbClient.searchByIMDB(query);
+console.log('Resultado por IMDB:', result);
+return result;
+} else {
+const results = await tmdbClient.searchByName(query);
+console.log('Resultados por nombre:', results);
+return results;
+}
+} catch(error) {
+console.error('Error:', error);
+throw error;
+}
+};
+});
 </script>
-
-<!-- 
-
-🎉 NUEVAS CARACTERÍSTICAS AGREGADAS:
-
-✨ BÚSQUEDA INVERSA POR NOMBRE:
-- Escribe "Simpson" en el campo de nombre de serie
-- Automáticamente encuentra "Los Simpsons" 
-- Completa el IMDB ID y todos los datos
-
-✨ BOTONES ADICIONALES:
-- "🔍 Buscar por nombre" en campos de nombre
-- "🔄 Autocompletar desde TMDB" en campos de ID
-
-✨ BÚSQUEDA INTELIGENTE:
-- Búsqueda automática al salir del campo (3+ caracteres)
-- Coincidencias parciales funcionan perfectamente
-- Prioriza resultados más relevantes
-
-✨ FUNCIONES DE TEST:
-- testSearchMovie("Avengers") - Buscar película
-- testSearchTV("Simpsons") - Buscar serie
-- testTMDB("tt0111161") - Buscar por IMDB ID
-
-CÓMO USAR LA NUEVA FUNCIONALIDAD:
-
-1. MÉTODO 1 - Por nombre:
-   - Escribe el nombre en el campo "movieName" o "seriesName"
-   - Haz clic en "🔍 Buscar por nombre" 
-   - O simplemente sal del campo (blur)
-
-2. MÉTODO 2 - Por IMDB ID (original):
-   - Escribe el IMDB ID en "movieId" o "seriesId"
-   - Haz clic en "🔄 Autocompletar desde TMDB"
-   - O simplemente sal del campo
-
-EJEMPLOS DE BÚSQUEDA:
-- "Simpson" → "Los Simpsons"
-- "Avengers" → "Avengers: Endgame"
-- "Marvel" → Primera película de Marvel encontrada
-
-
--->
 </body>
 </html>
