@@ -11,7 +11,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Almacenamiento en memoria (en producción, usar base de datos)
+// Rutas de archivos de datos
+const DATA_DIR = path.join(__dirname, 'data');
+const MOVIES_FILE = path.join(DATA_DIR, 'movies.json');
+const SERIES_FILE = path.join(DATA_DIR, 'series.json');
+const EPISODES_FILE = path.join(DATA_DIR, 'episodes.json');
+
+// Base de datos en memoria (se carga desde archivos)
 let contentDatabase = {
   movies: [],
   series: [],
@@ -42,6 +48,131 @@ const addonConfig = {
   resources: ['catalog', 'meta', 'stream'],
   idPrefixes: ['tt', 'custom']
 };
+
+// Funciones de persistencia
+async function ensureDataDirectory() {
+  try {
+    await fs.access(DATA_DIR);
+  } catch {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    console.log('📁 Directorio de datos creado:', DATA_DIR);
+  }
+}
+
+async function loadDataFromFiles() {
+  try {
+    await ensureDataDirectory();
+    
+    // Cargar películas
+    try {
+      const moviesData = await fs.readFile(MOVIES_FILE, 'utf8');
+      contentDatabase.movies = JSON.parse(moviesData);
+      console.log(`📽️ Cargadas ${contentDatabase.movies.length} películas`);
+    } catch (error) {
+      console.log('📽️ No se encontró archivo de películas, iniciando con lista vacía');
+      contentDatabase.movies = [];
+    }
+    
+    // Cargar series
+    try {
+      const seriesData = await fs.readFile(SERIES_FILE, 'utf8');
+      contentDatabase.series = JSON.parse(seriesData);
+      console.log(`📺 Cargadas ${contentDatabase.series.length} series`);
+    } catch (error) {
+      console.log('📺 No se encontró archivo de series, iniciando con lista vacía');
+      contentDatabase.series = [];
+    }
+    
+    // Cargar episodios
+    try {
+      const episodesData = await fs.readFile(EPISODES_FILE, 'utf8');
+      contentDatabase.episodes = JSON.parse(episodesData);
+      console.log(`🎞️ Cargados ${contentDatabase.episodes.length} episodios`);
+    } catch (error) {
+      console.log('🎞️ No se encontró archivo de episodios, iniciando con lista vacía');
+      contentDatabase.episodes = [];
+    }
+    
+    console.log('✅ Datos cargados exitosamente desde archivos');
+  } catch (error) {
+    console.error('❌ Error cargando datos:', error);
+  }
+}
+
+async function saveMoviesToFile() {
+  try {
+    await fs.writeFile(MOVIES_FILE, JSON.stringify(contentDatabase.movies, null, 2));
+    console.log('💾 Películas guardadas en archivo');
+  } catch (error) {
+    console.error('❌ Error guardando películas:', error);
+  }
+}
+
+async function saveSeriesToFile() {
+  try {
+    await fs.writeFile(SERIES_FILE, JSON.stringify(contentDatabase.series, null, 2));
+    console.log('💾 Series guardadas en archivo');
+  } catch (error) {
+    console.error('❌ Error guardando series:', error);
+  }
+}
+
+async function saveEpisodesToFile() {
+  try {
+    await fs.writeFile(EPISODES_FILE, JSON.stringify(contentDatabase.episodes, null, 2));
+    console.log('💾 Episodios guardados en archivo');
+  } catch (error) {
+    console.error('❌ Error guardando episodios:', error);
+  }
+}
+
+async function saveAllData() {
+  await Promise.all([
+    saveMoviesToFile(),
+    saveSeriesToFile(),
+    saveEpisodesToFile()
+  ]);
+}
+
+// Función para hacer respaldo completo
+async function createBackup() {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupDir = path.join(DATA_DIR, 'backups');
+    
+    try {
+      await fs.access(backupDir);
+    } catch {
+      await fs.mkdir(backupDir, { recursive: true });
+    }
+    
+    const backupFile = path.join(backupDir, `backup-${timestamp}.json`);
+    const backupData = {
+      timestamp: new Date().toISOString(),
+      data: contentDatabase
+    };
+    
+    await fs.writeFile(backupFile, JSON.stringify(backupData, null, 2));
+    console.log('🔄 Respaldo creado:', backupFile);
+    
+    // Mantener solo los últimos 10 respaldos
+    const backupFiles = await fs.readdir(backupDir);
+    const backupFilesSorted = backupFiles
+      .filter(file => file.startsWith('backup-') && file.endsWith('.json'))
+      .sort()
+      .reverse();
+    
+    if (backupFilesSorted.length > 10) {
+      const filesToDelete = backupFilesSorted.slice(10);
+      for (const file of filesToDelete) {
+        await fs.unlink(path.join(backupDir, file));
+        console.log('🗑️ Respaldo antiguo eliminado:', file);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error creando respaldo:', error);
+  }
+}
 
 // Ruta principal del addon - Manifiesto
 app.get('/manifest.json', (req, res) => {
@@ -190,7 +321,7 @@ app.get('/stream/:type/:id.json', (req, res) => {
 });
 
 // API para eliminar episodios específicos
-app.delete('/api/delete/episode/:episodeId', (req, res) => {
+app.delete('/api/delete/episode/:episodeId', async (req, res) => {
   const { episodeId } = req.params;
   
   // Decodificar el ID del episodio (format: seriesId:season:episode)
@@ -204,6 +335,7 @@ app.delete('/api/delete/episode/:episodeId', (req, res) => {
   
   if (index !== -1) {
     contentDatabase.episodes.splice(index, 1);
+    await saveEpisodesToFile();
     res.json({ success: true, message: 'Episodio eliminado' });
   } else {
     res.status(404).json({ error: 'Episodio no encontrado' });
@@ -211,7 +343,7 @@ app.delete('/api/delete/episode/:episodeId', (req, res) => {
 });
 
 // API para agregar contenido
-app.post('/api/add-movie', (req, res) => {
+app.post('/api/add-movie', async (req, res) => {
   const movieData = req.body;
   
   // Validar datos requeridos
@@ -225,7 +357,7 @@ app.post('/api/add-movie', (req, res) => {
     return res.status(409).json({ error: 'Película ya existe' });
   }
   
-  contentDatabase.movies.push({
+  const newMovie = {
     id: movieData.id,
     type: 'movie',
     name: movieData.name,
@@ -241,13 +373,17 @@ app.post('/api/add-movie', (req, res) => {
     imdbRating: movieData.imdbRating,
     url: movieData.url,
     quality: movieData.quality,
-    language: movieData.language
-  });
+    language: movieData.language,
+    addedAt: new Date().toISOString() // Timestamp de cuándo se agregó
+  };
+  
+  contentDatabase.movies.push(newMovie);
+  await saveMoviesToFile();
   
   res.json({ success: true, message: 'Película agregada exitosamente' });
 });
 
-app.post('/api/add-series', (req, res) => {
+app.post('/api/add-series', async (req, res) => {
   const seriesData = req.body;
   
   if (!seriesData.id || !seriesData.name) {
@@ -259,7 +395,7 @@ app.post('/api/add-series', (req, res) => {
     return res.status(409).json({ error: 'Serie ya existe' });
   }
   
-  contentDatabase.series.push({
+  const newSeries = {
     id: seriesData.id,
     type: 'series',
     name: seriesData.name,
@@ -272,13 +408,17 @@ app.post('/api/add-series', (req, res) => {
     background: seriesData.background,
     runtime: seriesData.runtime,
     logo: seriesData.logo,
-    imdbRating: seriesData.imdbRating
-  });
+    imdbRating: seriesData.imdbRating,
+    addedAt: new Date().toISOString() // Timestamp de cuándo se agregó
+  };
+  
+  contentDatabase.series.push(newSeries);
+  await saveSeriesToFile();
   
   res.json({ success: true, message: 'Serie agregada exitosamente' });
 });
 
-app.post('/api/add-episode', (req, res) => {
+app.post('/api/add-episode', async (req, res) => {
   const episodeData = req.body;
   
   if (!episodeData.seriesId || !episodeData.name || !episodeData.season || !episodeData.episode || !episodeData.url) {
@@ -302,7 +442,7 @@ app.post('/api/add-episode', (req, res) => {
     return res.status(409).json({ error: 'Episodio ya existe' });
   }
   
-  contentDatabase.episodes.push({
+  const newEpisode = {
     id: episodeId,
     seriesId: episodeData.seriesId,
     name: episodeData.name,
@@ -314,8 +454,12 @@ app.post('/api/add-episode', (req, res) => {
     runtime: episodeData.runtime,
     url: episodeData.url,
     quality: episodeData.quality,
-    language: episodeData.language
-  });
+    language: episodeData.language,
+    addedAt: new Date().toISOString() // Timestamp de cuándo se agregó
+  };
+  
+  contentDatabase.episodes.push(newEpisode);
+  await saveEpisodesToFile();
   
   res.json({ success: true, message: 'Episodio agregado exitosamente' });
 });
@@ -364,13 +508,14 @@ app.get('/api/debug/meta/:seriesId', (req, res) => {
 });
 
 // API para eliminar contenido
-app.delete('/api/delete/:type/:id', (req, res) => {
+app.delete('/api/delete/:type/:id', async (req, res) => {
   const { type, id } = req.params;
   
   if (type === 'movie') {
     const index = contentDatabase.movies.findIndex(movie => movie.id === id);
     if (index !== -1) {
       contentDatabase.movies.splice(index, 1);
+      await saveMoviesToFile();
       res.json({ success: true, message: 'Película eliminada' });
     } else {
       res.status(404).json({ error: 'Película no encontrada' });
@@ -381,6 +526,7 @@ app.delete('/api/delete/:type/:id', (req, res) => {
       contentDatabase.series.splice(index, 1);
       // También eliminar episodios relacionados
       contentDatabase.episodes = contentDatabase.episodes.filter(ep => ep.seriesId !== id);
+      await Promise.all([saveSeriesToFile(), saveEpisodesToFile()]);
       res.json({ success: true, message: 'Serie eliminada' });
     } else {
       res.status(404).json({ error: 'Serie no encontrada' });
@@ -390,13 +536,102 @@ app.delete('/api/delete/:type/:id', (req, res) => {
   }
 });
 
+// API para crear respaldo manual
+app.post('/api/backup', async (req, res) => {
+  try {
+    await createBackup();
+    res.json({ success: true, message: 'Respaldo creado exitosamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error creando respaldo' });
+  }
+});
+
+// API para obtener información de archivos
+app.get('/api/files-info', async (req, res) => {
+  try {
+    const info = {
+      dataDirectory: DATA_DIR,
+      files: {}
+    };
+    
+    // Información de archivos
+    for (const [key, file] of Object.entries({
+      movies: MOVIES_FILE,
+      series: SERIES_FILE,
+      episodes: EPISODES_FILE
+    })) {
+      try {
+        const stats = await fs.stat(file);
+        info.files[key] = {
+          path: file,
+          size: stats.size,
+          lastModified: stats.mtime,
+          exists: true
+        };
+      } catch {
+        info.files[key] = {
+          path: file,
+          exists: false
+        };
+      }
+    }
+    
+    // Información de respaldos
+    try {
+      const backupDir = path.join(DATA_DIR, 'backups');
+      const backupFiles = await fs.readdir(backupDir);
+      info.backups = backupFiles.filter(f => f.endsWith('.json')).length;
+    } catch {
+      info.backups = 0;
+    }
+    
+    res.json(info);
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo información de archivos' });
+  }
+});
+
 // Servir el frontend
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Stremio Addon corriendo en puerto ${PORT}`);
-  console.log(`Manifiesto disponible en: http://localhost:${PORT}/manifest.json`);
-  console.log(`Panel de administración en: http://localhost:${PORT}/`);
+// Inicializar servidor
+async function startServer() {
+  // Cargar datos existentes al iniciar
+  await loadDataFromFiles();
+  
+  // Crear respaldo automático cada hora
+  setInterval(createBackup, 60 * 60 * 1000); // 1 hora
+  
+  // Guardar datos cada 5 minutos (por seguridad)
+  setInterval(saveAllData, 5 * 60 * 1000); // 5 minutos
+  
+  app.listen(PORT, () => {
+    console.log(`🚀 Stremio Addon corriendo en puerto ${PORT}`);
+    console.log(`📋 Manifiesto disponible en: http://localhost:${PORT}/manifest.json`);
+    console.log(`🎛️ Panel de administración en: http://localhost:${PORT}/`);
+    console.log(`💾 Datos guardados en: ${DATA_DIR}`);
+    console.log(`🔄 Respaldo automático cada hora`);
+  });
+}
+
+// Manejar cierre del servidor para guardar datos
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Cerrando servidor...');
+  await saveAllData();
+  await createBackup();
+  console.log('💾 Datos guardados antes del cierre');
+  process.exit(0);
 });
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Recibida señal de terminación...');
+  await saveAllData();
+  await createBackup();
+  console.log('💾 Datos guardados antes del cierre');
+  process.exit(0);
+});
+
+// Iniciar el servidor
+startServer().catch(console.error);
