@@ -1045,8 +1045,7 @@ Reemplaza TU_API_KEY_AQUI con tu API key de TMDB
 -->
 
 <script>
-
-// ==== CONFIGURACIÓN ====
+<script>
 
 const TMDB_API_KEY = 'ed52d6c5a797006699cdcc63ed1208d5'; // ⚠️ CAMBIA ESTO POR TU API KEY
 
@@ -1064,8 +1063,128 @@ class TMDBClient {
 
         this.backdropBaseURL = 'https://image.tmdb.org/t/p/w1280';
 
-        this.logoBaseURL = 'https://image.tmdb.org/t/p/original'; // Para logos en alta resolución
+        this.logoBaseURL = 'https://image.tmdb.org/t/p/original';
 
+    }
+
+    // ✨ NUEVA: Búsqueda por nombre de película
+    async searchMovieByName(movieName) {
+        if (!this.apiKey || this.apiKey === 'TU_API_KEY_AQUI') {
+            throw new Error('❌ API Key de TMDB no configurada');
+        }
+
+        console.log('🔍 Buscando película por nombre:', movieName);
+
+        try {
+            const response = await fetch(
+                `${this.baseURL}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(movieName)}&language=es-MX&page=1`
+            );
+
+            if (!response.ok) {
+                throw new Error(`Error en búsqueda: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('🎬 Resultados de búsqueda:', data);
+
+            if (data.results && data.results.length > 0) {
+                // Retornar el primer resultado (más relevante)
+                const movie = data.results[0];
+                return {
+                    id: movie.id,
+                    imdb_id: null, // Lo obtendremos después
+                    title: movie.title,
+                    year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
+                    poster: movie.poster_path ? `${this.imageBaseURL}${movie.poster_path}` : null
+                };
+            } else {
+                throw new Error('❓ No se encontraron películas con ese nombre');
+            }
+        } catch (error) {
+            console.error('💥 Error en búsqueda por nombre:', error);
+            throw error;
+        }
+    }
+
+    // ✨ NUEVA: Búsqueda por nombre de serie
+    async searchTVByName(seriesName) {
+        if (!this.apiKey || this.apiKey === 'TU_API_KEY_AQUI') {
+            throw new Error('❌ API Key de TMDB no configurada');
+        }
+
+        console.log('🔍 Buscando serie por nombre:', seriesName);
+
+        try {
+            const response = await fetch(
+                `${this.baseURL}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(seriesName)}&language=es-MX&page=1`
+            );
+
+            if (!response.ok) {
+                throw new Error(`Error en búsqueda: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('📺 Resultados de búsqueda:', data);
+
+            if (data.results && data.results.length > 0) {
+                // Retornar el primer resultado (más relevante)
+                const tv = data.results[0];
+                return {
+                    id: tv.id,
+                    imdb_id: null, // Lo obtendremos después
+                    title: tv.name,
+                    year: tv.first_air_date ? new Date(tv.first_air_date).getFullYear() : null,
+                    poster: tv.poster_path ? `${this.imageBaseURL}${tv.poster_path}` : null
+                };
+            } else {
+                throw new Error('❓ No se encontraron series con ese nombre');
+            }
+        } catch (error) {
+            console.error('💥 Error en búsqueda por nombre:', error);
+            throw error;
+        }
+    }
+
+    // ✨ NUEVA: Obtener ID de IMDB desde detalles de película
+    async getMovieIMDBId(movieId) {
+        try {
+            const response = await fetch(
+                `${this.baseURL}/movie/${movieId}/external_ids?api_key=${this.apiKey}`
+            );
+
+            if (!response.ok) {
+                throw new Error(`Error obteniendo IMDB ID: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('🆔 IDs externos de película:', data);
+            
+            return data.imdb_id || null;
+        } catch (error) {
+            console.warn('⚠️ No se pudo obtener IMDB ID:', error);
+            return null;
+        }
+    }
+
+    // ✨ NUEVA: Obtener ID de IMDB desde detalles de serie
+    async getTVIMDBId(tvId) {
+        try {
+            const response = await fetch(
+                `${this.baseURL}/tv/${tvId}/external_ids?api_key=${this.apiKey}`
+            );
+
+            if (!response.ok) {
+                throw new Error(`Error obteniendo IMDB ID: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('🆔 IDs externos de serie:', data);
+            
+            return data.imdb_id || null;
+        } catch (error) {
+            console.warn('⚠️ No se pudo obtener IMDB ID:', error);
+            return null;
+        }
     }
 
     async searchByIMDB(imdbId) {
@@ -1136,7 +1255,6 @@ class TMDBClient {
 
     }
 
-    // Nueva función para obtener imágenes incluyendo logos
     async getMovieImages(movieId) {
         try {
             const response = await fetch(
@@ -1151,7 +1269,6 @@ class TMDBClient {
             const images = await response.json();
             console.log('🖼️ Imágenes disponibles:', images);
             
-            // Buscar logo (preferir inglés, luego sin idioma, luego cualquiera)
             let logo = null;
             if (images.logos && images.logos.length > 0) {
                 logo = images.logos.find(l => l.iso_639_1 === 'en') || 
@@ -1168,7 +1285,6 @@ class TMDBClient {
         }
     }
 
-    // Nueva función para obtener imágenes de series incluyendo logos
     async getTVImages(tvId) {
         try {
             const response = await fetch(
@@ -1183,7 +1299,6 @@ class TMDBClient {
             const images = await response.json();
             console.log('🖼️ Imágenes de serie disponibles:', images);
             
-            // Buscar logo (preferir inglés, luego sin idioma, luego cualquiera)
             let logo = null;
             if (images.logos && images.logos.length > 0) {
                 logo = images.logos.find(l => l.iso_639_1 === 'en') || 
@@ -1218,7 +1333,6 @@ class TMDBClient {
 
         console.log('🎬 Detalles de película:', movie);
 
-        // Obtener imágenes adicionales incluyendo logos
         const images = await this.getMovieImages(movieId);
 
         return {
@@ -1255,7 +1369,7 @@ class TMDBClient {
 
             background: movie.backdrop_path ? `${this.backdropBaseURL}${movie.backdrop_path}` : '',
 
-            logo: images?.logo || '', // ✨ NUEVO: Logo agregado
+            logo: images?.logo || '',
 
             description: movie.overview
 
@@ -1281,7 +1395,6 @@ class TMDBClient {
 
         console.log('📺 Detalles de serie:', tv);
 
-        // Obtener imágenes adicionales incluyendo logos
         const images = await this.getTVImages(tvId);
 
         return {
@@ -1312,7 +1425,7 @@ class TMDBClient {
 
             background: tv.backdrop_path ? `${this.backdropBaseURL}${tv.backdrop_path}` : '',
 
-            logo: images?.logo || '', // ✨ NUEVO: Logo agregado
+            logo: images?.logo || '',
 
             description: tv.overview
 
@@ -1329,8 +1442,6 @@ const tmdbClient = new TMDBClient();
 // ==== FUNCIONES DE UTILIDAD ====
 
 function showMessage(message, type = 'info') {
-
-    // Remover mensaje anterior
 
     const existing = document.querySelector('.tmdb-message');
 
@@ -1426,7 +1537,81 @@ function fillField(fieldId, value) {
 
 }
 
-// ==== AUTOCOMPLETADO ====
+// ✨ NUEVA: Búsqueda inversa por nombre de película
+async function searchMovieByName(movieName) {
+    if (!movieName || movieName.trim().length < 2) {
+        console.log('❌ Nombre de película muy corto:', movieName);
+        return;
+    }
+
+    try {
+        showMessage('🔍 Buscando película por nombre...', 'info');
+        console.log('🎬 Buscando película:', movieName);
+
+        const searchResult = await tmdbClient.searchMovieByName(movieName.trim());
+        
+        if (searchResult) {
+            // Obtener el IMDB ID
+            const imdbId = await tmdbClient.getMovieIMDBId(searchResult.id);
+            
+            if (imdbId) {
+                console.log('🆔 IMDB ID encontrado:', imdbId);
+                
+                // Completar el campo de ID automáticamente
+                fillField('movieId', imdbId);
+                
+                // Autocompletar todos los datos
+                await autoFillMovie(imdbId);
+                
+                showMessage(`✅ Película encontrada: ${searchResult.title} (${searchResult.year})`, 'success');
+            } else {
+                showMessage(`⚠️ Película encontrada pero sin IMDB ID: ${searchResult.title}`, 'warning');
+            }
+        }
+    } catch (error) {
+        console.error('💥 Error en búsqueda por nombre:', error);
+        showMessage(error.message, 'error');
+    }
+}
+
+// ✨ NUEVA: Búsqueda inversa por nombre de serie
+async function searchTVByName(seriesName) {
+    if (!seriesName || seriesName.trim().length < 2) {
+        console.log('❌ Nombre de serie muy corto:', seriesName);
+        return;
+    }
+
+    try {
+        showMessage('🔍 Buscando serie por nombre...', 'info');
+        console.log('📺 Buscando serie:', seriesName);
+
+        const searchResult = await tmdbClient.searchTVByName(seriesName.trim());
+        
+        if (searchResult) {
+            // Obtener el IMDB ID
+            const imdbId = await tmdbClient.getTVIMDBId(searchResult.id);
+            
+            if (imdbId) {
+                console.log('🆔 IMDB ID encontrado:', imdbId);
+                
+                // Completar el campo de ID automáticamente
+                fillField('seriesId', imdbId);
+                
+                // Autocompletar todos los datos
+                await autoFillSeries(imdbId);
+                
+                showMessage(`✅ Serie encontrada: ${searchResult.title} (${searchResult.year})`, 'success');
+            } else {
+                showMessage(`⚠️ Serie encontrada pero sin IMDB ID: ${searchResult.title}`, 'warning');
+            }
+        }
+    } catch (error) {
+        console.error('💥 Error en búsqueda por nombre:', error);
+        showMessage(error.message, 'error');
+    }
+}
+
+// ==== FUNCIONES ORIGINALES DE AUTOCOMPLETADO ====
 
 async function autoFillMovie(imdbId) {
 
@@ -1484,13 +1669,12 @@ async function autoFillMovie(imdbId) {
 
         fillField('movieBackground', movieData.background);
 
-        fillField('movieLogo', movieData.logo); // ✨ NUEVO: Logo agregado
+        fillField('movieLogo', movieData.logo);
 
         fillField('movieDescription', movieData.description);
 
         
 
-        // Mostrar información del logo en consola
         if (movieData.logo) {
             console.log('🎨 Logo encontrado:', movieData.logo);
             showMessage('✅ Información de película cargada (con logo)', 'success');
@@ -1567,13 +1751,12 @@ async function autoFillSeries(imdbId) {
 
         fillField('seriesBackground', seriesData.background);
 
-        fillField('seriesLogo', seriesData.logo); // ✨ NUEVO: Logo agregado
+        fillField('seriesLogo', seriesData.logo);
 
         fillField('seriesDescription', seriesData.description);
 
         
 
-        // Mostrar información del logo en consola
         if (seriesData.logo) {
             console.log('🎨 Logo de serie encontrado:', seriesData.logo);
             showMessage('✅ Información de serie cargada (con logo)', 'success');
@@ -1598,11 +1781,55 @@ async function autoFillSeries(imdbId) {
 
 document.addEventListener('DOMContentLoaded', function() {
 
-    console.log('🚀 Autocompletado TMDB con logos iniciado');
+    console.log('🚀 Autocompletado TMDB con búsqueda inversa iniciado');
 
     
 
-    // Campo de película
+    // ✨ NUEVO: Campo de nombre de película para búsqueda inversa
+    const movieNameInput = document.getElementById('movieName');
+    if (movieNameInput) {
+        console.log('✅ Campo movieName encontrado - configurando búsqueda inversa');
+        
+        // Agregar botón de búsqueda inversa
+        const movieNameContainer = movieNameInput.parentElement;
+        const searchMovieBtn = document.createElement('button');
+        searchMovieBtn.type = 'button';
+        searchMovieBtn.textContent = '🔍 Buscar por nombre';
+        searchMovieBtn.style.cssText = 'margin-top: 8px; margin-right: 8px; padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;';
+        searchMovieBtn.onclick = () => searchMovieByName(movieNameInput.value.trim());
+        movieNameContainer.appendChild(searchMovieBtn);
+        
+        // Búsqueda automática al salir del campo (después de 3 caracteres)
+        movieNameInput.addEventListener('blur', function() {
+            if (this.value.trim().length >= 3) {
+                searchMovieByName(this.value.trim());
+            }
+        });
+    }
+
+    // ✨ NUEVO: Campo de nombre de serie para búsqueda inversa
+    const seriesNameInput = document.getElementById('seriesName');
+    if (seriesNameInput) {
+        console.log('✅ Campo seriesName encontrado - configurando búsqueda inversa');
+        
+        // Agregar botón de búsqueda inversa
+        const seriesNameContainer = seriesNameInput.parentElement;
+        const searchSeriesBtn = document.createElement('button');
+        searchSeriesBtn.type = 'button';
+        searchSeriesBtn.textContent = '🔍 Buscar por nombre';
+        searchSeriesBtn.style.cssText = 'margin-top: 8px; margin-right: 8px; padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;';
+        searchSeriesBtn.onclick = () => searchTVByName(seriesNameInput.value.trim());
+        seriesNameContainer.appendChild(searchSeriesBtn);
+        
+        // Búsqueda automática al salir del campo (después de 3 caracteres)
+        seriesNameInput.addEventListener('blur', function() {
+            if (this.value.trim().length >= 3) {
+                searchTVByName(this.value.trim());
+            }
+        });
+    }
+    
+    // Campo de película (funcionalidad original)
 
     const movieIdInput = document.getElementById('movieId');
 
@@ -1611,8 +1838,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('✅ Campo movieId encontrado');
 
         
-
-        // Agregar botón de autocompletado
 
         const movieContainer = movieIdInput.parentElement;
 
@@ -1629,8 +1854,6 @@ document.addEventListener('DOMContentLoaded', function() {
         movieContainer.appendChild(movieBtn);
 
         
-
-        // Autocompletado automático al salir del campo
 
         movieIdInput.addEventListener('blur', function() {
 
@@ -1650,7 +1873,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     
 
-    // Campo de serie
+    // Campo de serie (funcionalidad original)
 
     const seriesIdInput = document.getElementById('seriesId');
 
@@ -1659,8 +1882,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('✅ Campo seriesId encontrado');
 
         
-
-        // Agregar botón de autocompletado
 
         const seriesContainer = seriesIdInput.parentElement;
 
@@ -1677,8 +1898,6 @@ document.addEventListener('DOMContentLoaded', function() {
         seriesContainer.appendChild(seriesBtn);
 
         
-
-        // Autocompletado automático al salir del campo
 
         seriesIdInput.addEventListener('blur', function() {
 
@@ -1698,7 +1917,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     
 
-    // Función de test para la consola
+    // Funciones de test para la consola
 
     window.testTMDB = async function(imdbId) {
 
@@ -1722,9 +1941,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     };
 
+    // ✨ NUEVA: Función de test para búsqueda por nombre
+    window.testSearchMovie = async function(movieName) {
+        console.log('🧪 Test búsqueda de película:', movieName);
+        try {
+            await searchMovieByName(movieName || 'Avengers');
+        } catch (error) {
+            console.error('❌ Test de búsqueda falló:', error);
+        }
+    };
+
+    window.testSearchTV = async function(seriesName) {
+        console.log('🧪 Test búsqueda de serie:', seriesName);
+        try {
+            await searchTVByName(seriesName || 'Simpsons');
+        } catch (error) {
+            console.error('❌ Test de búsqueda falló:', error);
+        }
+    };
+
     
 
-    console.log('💡 Para probar manualmente, escribe en la consola: testTMDB("tt0111161")');
+    console.log('💡 Funciones de test disponibles:');
+    console.log('   testTMDB("tt0111161") - Buscar por IMDB ID');
+    console.log('   testSearchMovie("Avengers") - Buscar película por nombre');
+    console.log('   testSearchTV("Simpsons") - Buscar serie por nombre');
 
 });
 
@@ -1732,42 +1973,44 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- 
 
-CAMBIOS PRINCIPALES EN ESTA VERSIÓN:
+🎉 NUEVAS CARACTERÍSTICAS AGREGADAS:
 
-✨ NUEVO: Agregada obtención de logos
-✨ NUEVO: Funciones getMovieImages() y getTVImages()
-✨ NUEVO: Campo 'logo' en los datos devueltos
-✨ NUEVO: Mensajes informativos sobre disponibilidad de logos
+✨ BÚSQUEDA INVERSA POR NOMBRE:
+- Escribe "Simpson" en el campo de nombre de serie
+- Automáticamente encuentra "Los Simpsons" 
+- Completa el IMDB ID y todos los datos
 
-Los logos se buscan en este orden de preferencia:
-1. Logo en inglés
-2. Logo sin idioma específico
-3. Primer logo disponible
+✨ BOTONES ADICIONALES:
+- "🔍 Buscar por nombre" en campos de nombre
+- "🔄 Autocompletar desde TMDB" en campos de ID
 
-INSTRUCCIONES DE USO:
+✨ BÚSQUEDA INTELIGENTE:
+- Búsqueda automática al salir del campo (3+ caracteres)
+- Coincidencias parciales funcionan perfectamente
+- Prioriza resultados más relevantes
 
-1. Obtén tu API key GRATUITA de TMDB:
-   - Ve a https://www.themoviedb.org/
-   - Crea una cuenta (gratis)
-   - Ve a Settings → API
-   - Copia tu API key
+✨ FUNCIONES DE TEST:
+- testSearchMovie("Avengers") - Buscar película
+- testSearchTV("Simpsons") - Buscar serie
+- testTMDB("tt0111161") - Buscar por IMDB ID
 
-2. Cambia "TU_API_KEY_AQUI" por tu API key real en la línea 6
+CÓMO USAR LA NUEVA FUNCIONALIDAD:
 
-3. Asegúrate de tener un campo en tu HTML para el logo:
-   <input type="text" id="movieLogo" name="movieLogo" placeholder="URL del logo">
-   <input type="text" id="seriesLogo" name="seriesLogo" placeholder="URL del logo">
+1. MÉTODO 1 - Por nombre:
+   - Escribe el nombre en el campo "movieName" o "seriesName"
+   - Haz clic en "🔍 Buscar por nombre" 
+   - O simplemente sal del campo (blur)
 
-4. Pega este script completo antes del </body> de tu HTML
+2. MÉTODO 2 - Por IMDB ID (original):
+   - Escribe el IMDB ID en "movieId" o "seriesId"
+   - Haz clic en "🔄 Autocompletar desde TMDB"
+   - O simplemente sal del campo
 
-NOTA IMPORTANTE:
-No todas las películas/series tienen logos disponibles en TMDB.
-Si no se encuentra logo, el campo quedará vacío.
+EJEMPLOS DE BÚSQUEDA:
+- "Simpson" → "Los Simpsons"
+- "Avengers" → "Avengers: Endgame"
+- "Marvel" → Primera película de Marvel encontrada
 
-PARA DIAGNOSTICAR PROBLEMAS:
-- Abre F12 → Console
-- Escribe: testTMDB("tt0111161")
-- Revisa los mensajes de la consola y la URL del logo
 
 -->
 </body>
