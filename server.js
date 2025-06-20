@@ -1,28 +1,38 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs').promises;
+const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Configuración de GitHub - Agrega estas variables de entorno en Render
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // Token de acceso personal de GitHub
+const GITHUB_OWNER = process.env.GITHUB_OWNER; // Tu usuario de GitHub
+const GITHUB_REPO = process.env.GITHUB_REPO; // Nombre del repositorio
+const GITHUB_BRANCH = process.env.GITHUB_BRANCH || 'main'; // Rama a usar
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Rutas de archivos de datos
-const DATA_DIR = path.join(__dirname, 'data');
-const MOVIES_FILE = path.join(DATA_DIR, 'movies.json');
-const SERIES_FILE = path.join(DATA_DIR, 'series.json');
-const EPISODES_FILE = path.join(DATA_DIR, 'episodes.json');
+// Rutas de archivos en GitHub
+const GITHUB_FILES = {
+  movies: 'data/movies.json',
+  series: 'data/series.json',
+  episodes: 'data/episodes.json'
+};
 
-// Almacenamiento en archivos
+// Almacenamiento en memoria (cache)
 let contentDatabase = {
   movies: [],
   series: [],
   episodes: []
 };
+
+// Cache de SHA de archivos para actualizaciones
+let fileSHAs = {};
 
 // Configuración del addon
 const addonConfig = {
@@ -49,54 +59,151 @@ const addonConfig = {
   idPrefixes: ['tt', 'custom']
 };
 
-// Funciones para manejo de archivos
-async function ensureDataDir() {
-  try {
-    await fs.access(DATA_DIR);
-  } catch (error) {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  }
+// Función para hacer peticiones a GitHub API
+function githubRequest(method, path, data = null) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.github.com',
+      port: 443,
+      path: path,
+      method: method,
+      headers: {
+        'User-Agent': 'Stremio-Addon',
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          const jsonBody = body ? JSON.parse(body) : {};
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(jsonBody);
+          } else {
+            reject(new Error(`GitHub API Error: ${res.statusCode} - ${jsonBody.message || body}`));
+          }
+        } catch (error) {
+          reject(new Error(`JSON Parse Error: ${error.message}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+    
+    req.end();
+  });
 }
 
-async function loadFromFile(filePath, defaultValue = []) {
+// Leer archivo desde GitHub
+async function readFromGitHub(filename) {
   try {
-    const data = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(data);
+    const path = `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filename}`;
+    console.log(`Leyendo desde GitHub: ${path}`);
+    
+    const response = await githubRequest('GET', path);
+    
+    // Guardar SHA para futuras actualizaciones
+    fileSHAs[filename] = response.sha;
+    
+    // Decodificar contenido base64
+    const content = Buffer.from(response.content, 'base64').toString('utf8');
+    return JSON.parse(content);
   } catch (error) {
+    console.log(`Archivo ${filename} no existe en GitHub, creando uno vacío`);
     // Si el archivo no existe, crear uno vacío
-    await fs.writeFile(filePath, JSON.stringify(defaultValue, null, 2));
-    return defaultValue;
+    await writeToGitHub(filename, []);
+    return [];
   }
 }
 
-async function saveToFile(filePath, data) {
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+// Escribir archivo a GitHub
+async function writeToGitHub(filename, data) {
+  try {
+    const content = Buffer.from(JSON.stringify(data, null, 2)).toString('base64');
+    const path = `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filename}`;
+    
+    const payload = {
+      message: `Update ${filename}`,
+      content: content,
+      branch: GITHUB_BRANCH
+    };
+    
+    // Si tenemos el SHA del archivo, incluirlo para actualización
+    if (fileSHAs[filename]) {
+      payload.sha = fileSHAs[filename];
+    }
+    
+    console.log(`Escribiendo a GitHub: ${path}`);
+    const response = await githubRequest('PUT', path, payload);
+    
+    // Actualizar SHA para futuras actualizaciones
+    fileSHAs[filename] = response.content.sha;
+    
+    console.log(`✅ Archivo ${filename} guardado en GitHub`);
+    return response;
+  } catch (error) {
+    console.error(`❌ Error guardando ${filename} en GitHub:`, error.message);
+    throw error;
+  }
 }
 
-async function loadAllData() {
-  await ensureDataDir();
+// Cargar todos los datos desde GitHub
+async function loadAllDataFromGitHub() {
+  console.log('🔄 Cargando datos desde GitHub...');
   
-  contentDatabase.movies = await loadFromFile(MOVIES_FILE, []);
-  contentDatabase.series = await loadFromFile(SERIES_FILE, []);
-  contentDatabase.episodes = await loadFromFile(EPISODES_FILE, []);
+  if (!GITHUB_TOKEN || !GITHUB_OWNER || !GITHUB_REPO) {
+    console.error('❌ Configuración de GitHub incompleta. Verifica las variables de entorno:');
+    console.error('GITHUB_TOKEN:', GITHUB_TOKEN ? '✅ Configurado' : '❌ Falta');
+    console.error('GITHUB_OWNER:', GITHUB_OWNER ? '✅ Configurado' : '❌ Falta');
+    console.error('GITHUB_REPO:', GITHUB_REPO ? '✅ Configurado' : '❌ Falta');
+    
+    // Usar datos vacíos si no hay configuración de GitHub
+    contentDatabase = { movies: [], series: [], episodes: [] };
+    return;
+  }
   
-  console.log(`Datos cargados: ${contentDatabase.movies.length} películas, ${contentDatabase.series.length} series, ${contentDatabase.episodes.length} episodios`);
+  try {
+    contentDatabase.movies = await readFromGitHub(GITHUB_FILES.movies);
+    contentDatabase.series = await readFromGitHub(GITHUB_FILES.series);
+    contentDatabase.episodes = await readFromGitHub(GITHUB_FILES.episodes);
+    
+    console.log(`✅ Datos cargados desde GitHub: ${contentDatabase.movies.length} películas, ${contentDatabase.series.length} series, ${contentDatabase.episodes.length} episodios`);
+  } catch (error) {
+    console.error('❌ Error cargando datos desde GitHub:', error.message);
+    // En caso de error, usar datos vacíos
+    contentDatabase = { movies: [], series: [], episodes: [] };
+  }
 }
 
-async function saveMovies() {
-  await saveToFile(MOVIES_FILE, contentDatabase.movies);
+// Guardar datos específicos en GitHub
+async function saveMoviesToGitHub() {
+  await writeToGitHub(GITHUB_FILES.movies, contentDatabase.movies);
 }
 
-async function saveSeries() {
-  await saveToFile(SERIES_FILE, contentDatabase.series);
+async function saveSeriesToGitHub() {
+  await writeToGitHub(GITHUB_FILES.series, contentDatabase.series);
 }
 
-async function saveEpisodes() {
-  await saveToFile(EPISODES_FILE, contentDatabase.episodes);
+async function saveEpisodesToGitHub() {
+  await writeToGitHub(GITHUB_FILES.episodes, contentDatabase.episodes);
 }
 
 // Cargar datos al iniciar
-loadAllData();
+loadAllDataFromGitHub();
 
 // Ruta principal del addon - Manifiesto
 app.get('/manifest.json', (req, res) => {
@@ -259,8 +366,12 @@ app.delete('/api/delete/episode/:episodeId', async (req, res) => {
   
   if (index !== -1) {
     contentDatabase.episodes.splice(index, 1);
-    await saveEpisodes();
-    res.json({ success: true, message: 'Episodio eliminado' });
+    try {
+      await saveEpisodesToGitHub();
+      res.json({ success: true, message: 'Episodio eliminado y guardado en GitHub' });
+    } catch (error) {
+      res.status(500).json({ error: 'Error guardando en GitHub: ' + error.message });
+    }
   } else {
     res.status(404).json({ error: 'Episodio no encontrado' });
   }
@@ -302,9 +413,15 @@ app.post('/api/add-movie', async (req, res) => {
   };
   
   contentDatabase.movies.push(newMovie);
-  await saveMovies();
   
-  res.json({ success: true, message: 'Película agregada exitosamente' });
+  try {
+    await saveMoviesToGitHub();
+    res.json({ success: true, message: 'Película agregada y guardada en GitHub exitosamente' });
+  } catch (error) {
+    // Remover la película del cache si falló el guardado
+    contentDatabase.movies.pop();
+    res.status(500).json({ error: 'Error guardando en GitHub: ' + error.message });
+  }
 });
 
 app.post('/api/add-series', async (req, res) => {
@@ -337,9 +454,15 @@ app.post('/api/add-series', async (req, res) => {
   };
   
   contentDatabase.series.push(newSeries);
-  await saveSeries();
   
-  res.json({ success: true, message: 'Serie agregada exitosamente' });
+  try {
+    await saveSeriesToGitHub();
+    res.json({ success: true, message: 'Serie agregada y guardada en GitHub exitosamente' });
+  } catch (error) {
+    // Remover la serie del cache si falló el guardado
+    contentDatabase.series.pop();
+    res.status(500).json({ error: 'Error guardando en GitHub: ' + error.message });
+  }
 });
 
 app.post('/api/add-episode', async (req, res) => {
@@ -383,9 +506,15 @@ app.post('/api/add-episode', async (req, res) => {
   };
   
   contentDatabase.episodes.push(newEpisode);
-  await saveEpisodes();
   
-  res.json({ success: true, message: 'Episodio agregado exitosamente' });
+  try {
+    await saveEpisodesToGitHub();
+    res.json({ success: true, message: 'Episodio agregado y guardado en GitHub exitosamente' });
+  } catch (error) {
+    // Remover el episodio del cache si falló el guardado
+    contentDatabase.episodes.pop();
+    res.status(500).json({ error: 'Error guardando en GitHub: ' + error.message });
+  }
 });
 
 // API para obtener contenido
@@ -439,8 +568,12 @@ app.delete('/api/delete/:type/:id', async (req, res) => {
     const index = contentDatabase.movies.findIndex(movie => movie.id === id);
     if (index !== -1) {
       contentDatabase.movies.splice(index, 1);
-      await saveMovies();
-      res.json({ success: true, message: 'Película eliminada' });
+      try {
+        await saveMoviesToGitHub();
+        res.json({ success: true, message: 'Película eliminada y guardada en GitHub' });
+      } catch (error) {
+        res.status(500).json({ error: 'Error guardando en GitHub: ' + error.message });
+      }
     } else {
       res.status(404).json({ error: 'Película no encontrada' });
     }
@@ -450,9 +583,13 @@ app.delete('/api/delete/:type/:id', async (req, res) => {
       contentDatabase.series.splice(index, 1);
       // También eliminar episodios relacionados
       contentDatabase.episodes = contentDatabase.episodes.filter(ep => ep.seriesId !== id);
-      await saveSeries();
-      await saveEpisodes();
-      res.json({ success: true, message: 'Serie eliminada' });
+      try {
+        await saveSeriesToGitHub();
+        await saveEpisodesToGitHub();
+        res.json({ success: true, message: 'Serie eliminada y guardada en GitHub' });
+      } catch (error) {
+        res.status(500).json({ error: 'Error guardando en GitHub: ' + error.message });
+      }
     } else {
       res.status(404).json({ error: 'Serie no encontrada' });
     }
@@ -461,14 +598,25 @@ app.delete('/api/delete/:type/:id', async (req, res) => {
   }
 });
 
-// API para recargar datos desde archivos (útil para desarrollo)
+// API para recargar datos desde GitHub
 app.post('/api/reload-data', async (req, res) => {
   try {
-    await loadAllData();
-    res.json({ success: true, message: 'Datos recargados desde archivos' });
+    await loadAllDataFromGitHub();
+    res.json({ success: true, message: 'Datos recargados desde GitHub' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al recargar datos' });
+    res.status(500).json({ error: 'Error al recargar datos desde GitHub: ' + error.message });
   }
+});
+
+// API para verificar configuración de GitHub
+app.get('/api/github-status', (req, res) => {
+  res.json({
+    configured: !!(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO),
+    owner: GITHUB_OWNER || 'No configurado',
+    repo: GITHUB_REPO || 'No configurado',
+    branch: GITHUB_BRANCH,
+    files: GITHUB_FILES
+  });
 });
 
 // Servir el frontend
@@ -477,8 +625,14 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Stremio Addon corriendo en puerto ${PORT}`);
-  console.log(`Manifiesto disponible en: http://localhost:${PORT}/manifest.json`);
-  console.log(`Panel de administración en: http://localhost:${PORT}/`);
-  console.log(`Archivos de datos en: ${DATA_DIR}`);
+  console.log(`🚀 Stremio Addon corriendo en puerto ${PORT}`);
+  console.log(`📄 Manifiesto disponible en: http://localhost:${PORT}/manifest.json`);
+  console.log(`🎛️ Panel de administración en: http://localhost:${PORT}/`);
+  
+  if (GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO) {
+    console.log(`📂 Almacenamiento en GitHub: ${GITHUB_OWNER}/${GITHUB_REPO}`);
+    console.log(`🌿 Rama: ${GITHUB_BRANCH}`);
+  } else {
+    console.log('⚠️ Configuración de GitHub incompleta - usando almacenamiento local');
+  }
 });
