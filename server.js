@@ -38,21 +38,21 @@ let fileSHAs = {};
 const addonConfig = {
   id: 'com.tudominio.myaddon',
   version: '1.0.0',
-  name: 'Mi Addon Personal',
-  description: 'Addon personalizado para agregar contenido propio',
+  name: 'Reproducir ahora',
+  description: 'Contenido en Español Latino,
   logo: 'https://via.placeholder.com/200x200.png?text=Mi+Addon',
   background: 'https://via.placeholder.com/1920x1080.png?text=Background',
   types: ['movie', 'series'],
   catalogs: [
     {
       type: 'movie',
-      id: 'my-movies',
-      name: 'Mis Películas'
+      id: 'Recomendación',
+      name: 'Recomendación'
     },
     {
       type: 'series',
-      id: 'my-series',
-      name: 'Mis Series'
+      id: 'Recomendación',
+      name: 'Recomendación'
     }
   ],
   resources: ['catalog', 'meta', 'stream'],
