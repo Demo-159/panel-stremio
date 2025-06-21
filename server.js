@@ -12,6 +12,10 @@ const GITHUB_OWNER = process.env.GITHUB_OWNER; // Tu usuario de GitHub
 const GITHUB_REPO = process.env.GITHUB_REPO; // Nombre del repositorio
 const GITHUB_BRANCH = process.env.GITHUB_BRANCH || 'main'; // Rama a usar
 
+app.get('/ping', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
